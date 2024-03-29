@@ -21,7 +21,7 @@ class VGGLoss(nn.Module):
         self.criterion = nn.MSELoss()
 
         # Use the device of the model parameters
-        self.device = next(self.vgg.parameters()).device
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def forward(self, input, target):
         # Ensure input and target are on the correct device
