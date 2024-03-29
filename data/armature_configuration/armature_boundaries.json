@@ -1,0 +1,54 @@
+{
+    "jaw_master": {
+        "max_translation": [
+            2,
+            2,
+            2
+        ],
+        "max_rotation": [
+            0,
+            1e-01,
+            1e-01,
+            1e-01
+        ]
+    },
+    "eyes": {
+        "max_translation": [
+            1,
+            2,
+            1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "eye.R": {
+        "max_translation": [
+            1,
+            2,
+            1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "eye.L": {
+        "max_translation": [
+            1,
+            2,
+            1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    }
+}

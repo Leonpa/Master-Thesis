@@ -1,0 +1,8 @@
+{
+    "relevant_bones": [
+        "jaw_master",
+        "eyes",
+        "eye.R",
+        "eye.L"
+    ]
+}
