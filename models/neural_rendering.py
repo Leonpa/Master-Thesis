@@ -199,6 +199,7 @@ class ModelTrainer:
         for batch_idx, (idle_images, perturbed_images, params) in enumerate(self.train_loader):
             idle_images, perturbed_images, params = idle_images.to(self.device), perturbed_images.to(self.device), params.to(self.device)
 
+            self.model.to(self.device)
             self.optimizer.zero_grad()
             outputs = self.model(idle_images, params)
             mse_loss = self.mse_loss(outputs, perturbed_images)
