@@ -6,11 +6,11 @@ def save_checkpoint(model, model_optimizer, epoch, model_type):
     Saves the current state of the training process depending on the model type.
     """
     if model_type == 'discriminator':
-        file_path = "checkpoints/discriminator/checkpoint.pth"
+        file_path = f'checkpoints/discriminator/checkpoint_epoch_{epoch + 1}.pth'
     elif model_type == 'generator':
-        file_path = "checkpoints/generator/checkpoint.pth"
+        file_path = f'checkpoints/generator/checkpoint_epoch_{epoch + 1}.pth'
     elif model_type == 'neural_rendering':
-        file_path = "checkpoints/neural_rendering/checkpoint.pth"
+        file_path = f'checkpoints/neural_rendering/checkpoint_epoch_{epoch + 1}.pth'
     else:
         raise ValueError("Invalid model type. Please specify either 'discriminator', 'generator' or 'neural_rendering'.")
 

@@ -191,13 +191,14 @@ class ModelTrainer:
 
         self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) if val_dataset else None
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        # self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         self.criterion = torch.nn.MSELoss()
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.step_size, gamma=self.gamma)  # Initialize scheduler
 
         self.perceptual_loss = VGGLoss().to(device)
         self.mse_loss = torch.nn.MSELoss()
-        self.loss_weight = 0.5  # Weight for combining MSE and perceptual loss
+        self.loss_weight = 0.2  # Weight for combining MSE and perceptual loss
 
         # TensorBoard SummaryWriter initialization
         self.writer = SummaryWriter(log_dir)
@@ -212,9 +213,9 @@ class ModelTrainer:
             self.optimizer.zero_grad()
             outputs = self.model(idle_images, params)
             mse_loss = self.mse_loss(outputs, perturbed_images)
-            vgg_loss = self.perceptual_loss(outputs, perturbed_images)
+            # vgg_loss = self.perceptual_loss(outputs, perturbed_images)
             # Combine losses
-            loss = mse_loss + self.loss_weight * vgg_loss
+            loss = mse_loss     # + self.loss_weight * vgg_loss
             loss.backward()
             self.optimizer.step()
 
