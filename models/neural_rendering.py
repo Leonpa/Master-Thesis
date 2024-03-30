@@ -168,8 +168,9 @@ class RenderDataset(torch.utils.data.Dataset):
 
 
 class ModelTrainer:
-    def __init__(self, model, train_dataset, val_dataset=None, batch_size=32, learning_rate=1e-3, device="cuda" if torch.cuda.is_available() else "cpu", log_dir='./logs', step_size=10,
-                 gamma=0.1):
+    def __init__(self, model, train_dataset, val_dataset=None, batch_size=32, learning_rate=1e-3, device="cuda" if torch.cuda.is_available() else
+    "cpu", log_dir='./logs', step_size=10, gamma=0.1):
+
         self.model = model.to(device)
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
