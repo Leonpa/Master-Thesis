@@ -12,6 +12,19 @@ import torchvision.models as models
 import torch.nn.functional as F
 
 
+class FiLMLayer(nn.Module):
+    def __init__(self, num_features, num_params=28):
+        super(FiLMLayer, self).__init__()
+        self.scale_transform = nn.Linear(num_params, num_features)  # Adjusted to match the flattened size of params
+        self.shift_transform = nn.Linear(num_params, num_features)
+
+    def forward(self, x, params):
+        params_flat = params.view(params.size(0), -1)
+        scale = self.scale_transform(params_flat).unsqueeze(2).unsqueeze(3).expand_as(x)
+        shift = self.shift_transform(params_flat).unsqueeze(2).unsqueeze(3).expand_as(x)
+        return x * scale + shift
+
+
 class VGGLoss(nn.Module):
     def __init__(self):
         super(VGGLoss, self).__init__()
@@ -39,7 +52,9 @@ class VGGLoss(nn.Module):
         target_features = self.vgg(target)
 
         loss = self.criterion(input_features, target_features)
+        print(f"Loss after VGG Forward: {loss.shape}")
         return loss
+
 
 class DoubleConv(nn.Module):
     """(Convolution => [BN] => ReLU) * 2"""
@@ -72,10 +87,14 @@ class Down(nn.Module):
     def forward(self, x):
         return self.maxpool_conv(x)
 
+
 class Up(nn.Module):
     """Upscaling then double conv"""
-    def __init__(self, in_channels, out_channels, bilinear=True):
+    def __init__(self, in_channels, out_channels, num_params, bilinear=True):
         super().__init__()
+
+        self.film = FiLMLayer(out_channels, num_params)
+
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         else:
@@ -83,7 +102,7 @@ class Up(nn.Module):
 
         self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
 
-    def forward(self, x1, x2):
+    def forward(self, x1, x2, params):
         x1 = self.up(x1)
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
@@ -91,7 +110,10 @@ class Up(nn.Module):
         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
                         diffY // 2, diffY - diffY // 2])
         x = torch.cat([x2, x1], dim=1)
-        return self.conv(x)
+        x = self.conv(x)
+        x = self.film(x, params)  # Apply FiLM with rig parameters
+        return x
+
 
 class OutConv(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -114,29 +136,30 @@ class SurrogateUNet(nn.Module):
         self.down3 = Down(256, 512)
         factor = 2 if bilinear else 1
         self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, bilinear)
-        self.up2 = Up(512, 256 // factor, bilinear)
-        self.up3 = Up(256, 128 // factor, bilinear)
-        self.up4 = Up(128, 64, bilinear)
+        self.up1 = Up(1024, 512 // factor, n_rig_params, bilinear)
+        self.up2 = Up(512, 256 // factor, n_rig_params, bilinear)
+        self.up3 = Up(256, 128 // factor, n_rig_params, bilinear)
+        self.up4 = Up(128, 64, n_rig_params, bilinear)
         self.outc = OutConv(64, n_classes)
 
         # Process rig parameters
         self.fc_rig_params = nn.Linear(n_rig_params, 64 * 64 * factor)
 
     def forward(self, idle_image, rig_params):
-        rig_params = self.fc_rig_params(rig_params)
-        rig_params = rig_params.view(-1, 64, 64, 1)
-        rig_params = rig_params.repeat(1, 1, 1, idle_image.shape[3] // 64) # Adjust to match spatial dimensions
+        plain_rig_params = rig_params
+        # rig_params = self.fc_rig_params(rig_params)
+        # rig_params = rig_params.view(-1, 64, 64, 1)
+        # rig_params = rig_params.repeat(1, 1, 1, idle_image.shape[3] // 64) # Adjust to match spatial dimensions
 
         x1 = self.inc(idle_image)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
+        x = self.up1(x5, x4, plain_rig_params)
+        x = self.up2(x, x3, plain_rig_params)
+        x = self.up3(x, x2, plain_rig_params)
+        x = self.up4(x, x1, plain_rig_params)
         logits = self.outc(x)
         return logits
 
