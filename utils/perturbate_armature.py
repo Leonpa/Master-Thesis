@@ -3,8 +3,8 @@ import json
 import random
 
 
-def apply_perturbations_within_limits(armature_name, base_data_path='idle_armature.json',
-                                      constraints_path='armature_boundaries.json'):
+def apply_perturbations_within_limits(armature_name, base_data_path='data/armature_configuration/idle_armature.json',
+                                      constraints_path='data/armature_configuration/armature_boundaries.json'):
     # Load base bone data from the JSON file
     with open(base_data_path, 'r') as infile:
         base_data = json.load(infile)

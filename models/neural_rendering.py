@@ -178,6 +178,20 @@ class RenderDataset(torch.utils.data.Dataset):
         if self.transform:
             self.idle_image = self.transform(self.idle_image)
 
+    def compute_params_stats(self):
+        all_params = []
+        for key in self.keys:
+            param_values = []
+            for part in self.params[key].values():
+                param_values.extend(part['location'])
+                param_values.extend(part['rotation'])
+            all_params.append(param_values)
+
+        all_params_tensor = torch.tensor(all_params, dtype=torch.float32)
+        params_mean = torch.mean(all_params_tensor, dim=0)
+        params_std = torch.std(all_params_tensor, dim=0)
+        return params_mean, params_std
+
     def __len__(self):
         return len(self.params)
 
@@ -188,6 +202,10 @@ class RenderDataset(torch.utils.data.Dataset):
             param_values.extend(part['location'])
             param_values.extend(part['rotation'])
         params = torch.tensor(param_values, dtype=torch.float32)
+
+        # Normalize the parameters if mean and std are provided
+        if self.params_mean is not None and self.params_std is not None:
+            params = (params - self.params_mean) / self.params_std
 
         # Load and transform the specific perturbed image
         img_path = os.path.join(self.img_folder, f'{key}_rendis0001.png')
@@ -248,8 +266,6 @@ class ModelTrainer:
 
         # Log average loss at the end of the epoch
         epoch_loss = running_loss / len(self.train_loader.dataset)
-        self.writer.add_scalar('Loss/train_epoch_average', epoch_loss, epoch)
-
         return epoch_loss  # Returning for potential further usage
 
     def train(self, num_epochs):
@@ -258,6 +274,10 @@ class ModelTrainer:
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}')
             # Step the scheduler after each epoch
             self.scheduler.step()
+
+            self.writer.add_scalar('Training loss', epoch_loss, epoch)
+            up1_weight = self.model.up1.weight.data
+            self.writer.add_histogram('layer1/weights', up1_weight, epoch)
 
         # Close the SummaryWriter after training is finished
         self.writer.close()

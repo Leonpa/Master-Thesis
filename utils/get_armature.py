@@ -2,13 +2,15 @@ import bpy
 import json
 
 
-def get_armature_data(armature_name, json_file_path='relevant_armature.json'):
+def get_armature_data(armature_name, json_file_path='data/armature_configuration/relevant_armature.json'):
     armature = bpy.data.objects[armature_name]
     if armature is None:
         raise Exception(armature)
 
     with open(json_file_path, 'r') as infile:
         relevant_bones = json.load(infile)
+
+    print("i am here")
 
     bones_data = {}
 
