@@ -125,7 +125,7 @@ class OutConv(nn.Module):
 
 class SurrogateUNet(nn.Module):
     def __init__(self, n_channels, n_classes, n_rig_params, bilinear=True):
-        super(SurrogateUNet, self).__init__()
+        super().__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.bilinear = bilinear
