@@ -406,12 +406,12 @@ class Evaluator:
         plt.title('Original Idle Image')
         plt.axis('off')
 
-        plt.subplot(1, 2, 2)
+        plt.subplot(1, 3, 2)
         plt.imshow(ground_truth_image)
         plt.title('Ground Truth Image')
         plt.axis('off')
 
-        plt.subplot(1, 1, 2)
+        plt.subplot(1, 3, 3)
         plt.imshow(output_image)
         plt.title('Output Image')
         plt.axis('off')
