@@ -92,7 +92,43 @@ class OutConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-class SurrogateUNet(nn.Module):
+
+class SurrogateNet(nn.Module):
+    def __init__(self, n_channels, n_rig_params, n_classes):
+        super().__init__()
+        self.n_channels = n_channels
+        self.img_size = 512
+        self.n_rig_params = n_rig_params
+        self.n_classes = n_classes
+
+        # Calculate the size of the combined input (flattened image + rig parameters)
+        combined_input_size = n_channels * self.img_size * self.img_size + n_rig_params
+
+        self.network = nn.Sequential(
+            nn.Linear(combined_input_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, n_channels * self.img_size * self.img_size),
+            nn.Tanh()  # Assuming output pixel values are normalized between -1 and 1
+        )
+
+    def forward(self, x, rig_params):
+        # Flatten the input image
+        x = x.view(x.size(0), -1)
+
+        # Concatenate the flattened image with the rig parameters
+        x = torch.cat((x, rig_params), dim=1)
+
+        # Pass the combined input through the network
+        x = self.network(x)
+
+        # Reshape the output to match the image format
+        x = x.view(x.size(0), self.n_channels, self.img_size, self.img_size)
+
+        return x
+
+    """"
     def __init__(self, n_channels, n_classes, n_rig_params, bilinear=True):
         super().__init__()
         self.n_channels = n_channels
@@ -131,7 +167,7 @@ class SurrogateUNet(nn.Module):
         x = self.up4(x, x1, plain_rig_params)
         logits = self.outc(x)
         return logits
-
+    """
 
 class RenderDataset(torch.utils.data.Dataset):
     def __init__(self, rig_params_json_path, train_set_path, idle_img_path, transform=None):
@@ -344,9 +380,9 @@ class Evaluator:
         rig_params = self.load_parameters(index)
         idle_image = self.load_idle_image()
 
-        ground_truth_image_path = os.path.join(self.img_folder, f"{list(self.rig_params_json_path.keys())[index]}_ground_truth.png")
+        ground_truth_image_path = os.path.join(self.img_folder, f'{index}_rendis0001.png')
         ground_truth_image = Image.open(ground_truth_image_path).convert('RGB')
-        ground_truth_image = self.transform(ground_truth_image).unsqueeze(0).to(self.device)  # Assuming self.transform is applicable
+        ground_truth_image = self.transform(ground_truth_image).unsqueeze(0).to(self.device)
         ground_truth_image_np = ground_truth_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
         ground_truth_image_np = np.clip(ground_truth_image_np, 0, 1)
 
