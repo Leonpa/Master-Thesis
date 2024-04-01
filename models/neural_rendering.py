@@ -204,8 +204,7 @@ class RenderDataset(torch.utils.data.Dataset):
         params = torch.tensor(param_values, dtype=torch.float32)
 
         # Normalize the parameters if mean and std are provided
-        if self.params_mean is not None and self.params_std is not None:
-            params = (params - self.params_mean) / self.params_std
+        params = (params - self.params_mean) / (self.params_std + 1e-8)  # Adding epsilon to avoid division by zero
 
         # Load and transform the specific perturbed image
         img_path = os.path.join(self.img_folder, f'{key}_rendis0001.png')
@@ -240,6 +239,9 @@ class ModelTrainer:
         self.perceptual_loss = VGGLoss().to(device)
         self.mse_loss = torch.nn.MSELoss()
         self.loss_weight = 0.2  # Weight for combining MSE and perceptual loss
+
+        # Pre-compute mean and std for normalization
+        self.params_mean, self.params_std = self.compute_params_stats()
 
         # TensorBoard SummaryWriter initialization
         self.writer = SummaryWriter(log_dir)
