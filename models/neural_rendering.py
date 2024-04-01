@@ -188,7 +188,7 @@ class RenderDataset(torch.utils.data.Dataset):
 
 class ModelTrainer:
     def __init__(self, model, train_dataset, val_dataset=None, batch_size=32, learning_rate=1e-3, device="cuda" if torch.cuda.is_available() else
-    "cpu", log_dir='./logs', step_size=10, gamma=0.1):
+    "cpu", log_dir='./logs', step_size=10, gamma=0.1, vgg_loss_weight=0.8, landmark_loss_weight=0.2):
 
         self.model = model.to(device)
         self.train_dataset = train_dataset
@@ -209,8 +209,8 @@ class ModelTrainer:
         self.perceptual_loss = VGGLoss().to(device)
         self.mse_loss = torch.nn.MSELoss()
         self.simulated_landmark_loss = SimulatedLandmarkLoss().to(device)
-        self.vgg_loss_weight = 0.8  # Weight for combining MSE and perceptual loss
-        self.landmark_loss_weight = 0.2  # Weight for combining perceptual and landmark loss
+        self.vgg_loss_weight = vgg_loss_weight  # Weight for combining MSE and perceptual loss
+        self.landmark_loss_weight = landmark_loss_weight  # Weight for combining perceptual and landmark loss
 
         # TensorBoard SummaryWriter initialization
         self.writer = SummaryWriter(log_dir)
