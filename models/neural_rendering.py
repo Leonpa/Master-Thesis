@@ -343,6 +343,13 @@ class Evaluator:
     def evaluate(self, index=0):
         rig_params = self.load_parameters(index)
         idle_image = self.load_idle_image()
+
+        ground_truth_image_path = os.path.join(self.img_folder, f"{list(self.rig_params_json_path.keys())[index]}_ground_truth.png")
+        ground_truth_image = Image.open(ground_truth_image_path).convert('RGB')
+        ground_truth_image = self.transform(ground_truth_image).unsqueeze(0).to(self.device)  # Assuming self.transform is applicable
+        ground_truth_image_np = ground_truth_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
+        ground_truth_image_np = np.clip(ground_truth_image_np, 0, 1)
+
         with torch.no_grad():
             output = self.model(idle_image, rig_params).cpu().squeeze(0)  # Remove batch dimension
 
@@ -354,18 +361,22 @@ class Evaluator:
         # Return both the transformed idle image and the output for comparison
         idle_img_np = idle_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
 
-        return idle_img_np, ground_truth_image, output_image
+        return idle_img_np, ground_truth_image_np, output_image
 
-    def display_results(self, idle_image, output_image):
+    def display_results(self, idle_image, ground_truth_image, output_image):
         plt.figure(figsize=(12, 6))
-        plt.subplot(1, 2, 1)
+        plt.subplot(1, 3, 1)
         plt.imshow(idle_image)
         plt.title('Original Idle Image')
         plt.axis('off')
 
         plt.subplot(1, 2, 2)
+        plt.imshow(ground_truth_image)
+        plt.title('Ground Truth Image')
+        plt.axis('off')
+
+        plt.subplot(1, 1, 2)
         plt.imshow(output_image)
         plt.title('Output Image')
         plt.axis('off')
-
         plt.show()
