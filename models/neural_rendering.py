@@ -25,37 +25,6 @@ class FiLMLayer(nn.Module):
         return x * scale + shift
 
 
-class VGGLoss(nn.Module):
-    def __init__(self):
-        super(VGGLoss, self).__init__()
-        self.vgg = models.vgg19(pretrained=True).features
-        # Freeze VGG parameters
-        for parameter in self.vgg.parameters():
-            parameter.requires_grad = False
-        self.criterion = nn.MSELoss()
-
-        # Use the device of the model parameters
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    def forward(self, input, target):
-        # Ensure input and target are on the correct device
-        input = input.to(self.device)
-        target = target.to(self.device)
-
-        # Normalize input and target to match VGG training data
-        mean = torch.tensor([0.485, 0.456, 0.406]).to(self.device).view(1, -1, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).to(self.device).view(1, -1, 1, 1)
-        input = (input - mean) / std
-        target = (target - mean) / std
-
-        input_features = self.vgg(input)
-        target_features = self.vgg(target)
-
-        loss = self.criterion(input_features, target_features)
-        print(f"Loss after VGG Forward: {loss.shape}")
-        return loss
-
-
 class DoubleConv(nn.Module):
     """(Convolution => [BN] => ReLU) * 2"""
     def __init__(self, in_channels, out_channels, mid_channels=None):
@@ -239,7 +208,9 @@ class ModelTrainer:
 
         self.perceptual_loss = VGGLoss().to(device)
         self.mse_loss = torch.nn.MSELoss()
-        self.loss_weight = 0.2  # Weight for combining MSE and perceptual loss
+        self.simulated_landmark_loss = SimulatedLandmarkLoss().to(device)
+        self.vgg_loss_weight = 0.8  # Weight for combining MSE and perceptual loss
+        self.landmark_loss_weight = 0.2  # Weight for combining perceptual and landmark loss
 
         # TensorBoard SummaryWriter initialization
         self.writer = SummaryWriter(log_dir)
@@ -254,9 +225,12 @@ class ModelTrainer:
             self.optimizer.zero_grad()
             outputs = self.model(idle_images, params)
             mse_loss = self.mse_loss(outputs, perturbed_images)
-            # vgg_loss = self.perceptual_loss(outputs, perturbed_images)
+            vgg_loss = self.perceptual_loss(outputs, perturbed_images)
+            landmark_loss = self.simulated_landmark_loss(outputs, perturbed_images)
+
+            print(f"Loss after VGG: {vgg_loss}, Loss after MSE: {mse_loss}, Loss after Landmark: {landmark_loss}")
             # Combine losses
-            loss = mse_loss     # + self.loss_weight * vgg_loss
+            loss = mse_loss + self.vgg_loss_weight * vgg_loss + self.landmark_loss_weight * landmark_loss
             loss.backward()
             self.optimizer.step()
 
@@ -277,6 +251,62 @@ class ModelTrainer:
 
         # Close the SummaryWriter after training is finished
         self.writer.close()
+
+
+class FeatureExtractor(nn.Module):
+    def __init__(self):
+        super(FeatureExtractor, self).__init__()
+        model = models.resnet18(pretrained=True)
+        self.features = nn.Sequential(*list(model.children())[:-2])  # Use up to the second last layer
+
+    def forward(self, x):
+        x = self.features(x)  # (B, C, H, W)
+        return x
+
+
+class SimulatedLandmarkLoss(nn.Module):
+    def __init__(self):
+        super(SimulatedLandmarkLoss, self).__init__()
+        self.feature_extractor = FeatureExtractor()
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False  # Freeze the feature extractor
+
+    def forward(self, generated_images, target_images):
+        gen_features = self.feature_extractor(generated_images)
+        target_features = self.feature_extractor(target_images)
+        # Compute loss as the mean squared error of the features
+        loss = F.mse_loss(gen_features, target_features)
+        return loss
+
+
+class VGGLoss(nn.Module):
+    def __init__(self):
+        super(VGGLoss, self).__init__()
+        self.vgg = models.vgg19(pretrained=True).features
+        # Freeze VGG parameters
+        for parameter in self.vgg.parameters():
+            parameter.requires_grad = False
+        self.criterion = nn.MSELoss()
+
+        # Use the device of the model parameters
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    def forward(self, input, target):
+        # Ensure input and target are on the correct device
+        input = input.to(self.device)
+        target = target.to(self.device)
+
+        # Normalize input and target to match VGG training data
+        mean = torch.tensor([0.485, 0.456, 0.406]).to(self.device).view(1, -1, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).to(self.device).view(1, -1, 1, 1)
+        input = (input - mean) / std
+        target = (target - mean) / std
+
+        input_features = self.vgg(input)
+        target_features = self.vgg(target)
+
+        loss = self.criterion(input_features, target_features)
+        return loss
 
 
 class Evaluator:
@@ -321,13 +351,10 @@ class Evaluator:
         print(max(output_image.flatten()))
         output_image = np.clip(output_image, 0, 1)  # Ensure the image's values are between 0 and 1
 
-        ###############################################################################################
-        output_image = output_image * 1
-        ###############################################################################################
-
         # Return both the transformed idle image and the output for comparison
         idle_img_np = idle_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
-        return idle_img_np, output_image
+
+        return idle_img_np, ground_truth_image, output_image
 
     def display_results(self, idle_image, output_image):
         plt.figure(figsize=(12, 6))
