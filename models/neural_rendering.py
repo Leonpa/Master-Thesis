@@ -232,8 +232,8 @@ class ModelTrainer:
 
         self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         self.val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False) if val_dataset else None
-        self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
-        # self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        # self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         self.criterion = torch.nn.MSELoss()
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.step_size, gamma=self.gamma)  # Initialize scheduler
 
@@ -274,10 +274,6 @@ class ModelTrainer:
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}')
             # Step the scheduler after each epoch
             self.scheduler.step()
-
-            self.writer.add_scalar('Training loss', epoch_loss, epoch)
-            up1_weight = self.model.up1.weight.data
-            self.writer.add_histogram('layer1/weights', up1_weight, epoch)
 
         # Close the SummaryWriter after training is finished
         self.writer.close()
