@@ -276,12 +276,11 @@ class ModelTrainer:
             self.optimizer.zero_grad()
             outputs = self.model(idle_images, params)
             mse_loss = self.mse_loss(outputs, perturbed_images)
-            # vgg_loss = self.perceptual_loss(outputs, perturbed_images)
-            # landmark_loss = self.simulated_landmark_loss(outputs, perturbed_images)
+            vgg_loss = self.perceptual_loss(outputs, perturbed_images)
+            landmark_loss = self.simulated_landmark_loss(outputs, perturbed_images)
 
-            # print(f"Loss after VGG: {vgg_loss}, Loss after MSE: {mse_loss}, Loss after Landmark: {landmark_loss}")
-            # loss = mse_loss + self.vgg_loss_weight * vgg_loss + self.landmark_loss_weight * landmark_loss
-            loss = mse_loss
+            print(f"Loss after VGG: {vgg_loss}, Loss after MSE: {mse_loss}, Loss after Landmark: {landmark_loss}")
+            loss = mse_loss + self.vgg_loss_weight * vgg_loss + self.landmark_loss_weight * landmark_loss
             loss.backward()
             self.optimizer.step()
 
