@@ -92,6 +92,98 @@ class OutConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+
+class ChannelAttention(nn.Module):
+    def __init__(self, num_channels, num_params):
+        super(ChannelAttention, self).__init__()
+        # A simple linear layer to transform the rig parameters into attention scores
+        self.attention = nn.Sequential(
+            nn.Linear(num_params, num_channels),
+            nn.Sigmoid()  # Ensure scores are in [0, 1] range
+        )
+
+    def forward(self, x, rig_params):
+        # Generate attention scores for each channel
+        scores = self.attention(rig_params).unsqueeze(2).unsqueeze(3)  # Reshape to match spatial dimensions
+        return x * scores  # Apply attention scores to feature map
+
+
+class AdaptiveInstanceNorm(nn.Module):
+    def __init__(self, num_features, num_params):
+        super(AdaptiveInstanceNorm, self).__init__()
+        self.num_features = num_features
+        self.linear = nn.Linear(num_params, num_features * 2)
+        self.linear.weight.data[:, :num_features].normal_(1, 0.02)  # Initialise scale at N(1, 0.02)
+        self.linear.weight.data[:, num_features:].zero_()  # Initialise bias at 0
+
+    def forward(self, x, rig_params):
+        # Obtain scale and bias
+        scale_bias = self.linear(rig_params)
+        scale, bias = scale_bias.chunk(2, 1)
+        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x)
+        bias = bias.unsqueeze(2).unsqueeze(3).expand_as(x)
+        return scale * x + bias
+
+
+class ComplexNet(nn.Module):
+    def __init__(self, num_params):
+        super().__init__()
+        # Define the number of rigging parameters:
+
+        # Convolutional layers
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),  # Input: 3x512x512
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # Output: 16x256x256
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # Output: 32x128x128
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # Output: 64x64x64
+        )
+
+        self.fc_layers = nn.Sequential(
+            nn.Linear(64 * 64 * 64 + num_params, 1024),  # Combine with params
+            nn.ReLU(),
+        )
+
+        self.adinorm1 = AdaptiveInstanceNorm(1024, num_params)
+
+        self.attention1 = ChannelAttention(64, num_params)  # Assuming 64 channels in the feature map
+
+        self.upsample_layers = nn.Sequential(
+            nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1),  # Output: 512x2x2
+            nn.ReLU(),
+            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1),  # Output: 256x4x4
+            nn.ReLU(),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),  # Output: 128x8x8
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),  # Output: 64x16x16
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # Output: 32x32x32
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),  # Output: 16x64x64
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1),  # Output: 8x128x128
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1),  # Output: 4x256x256
+            nn.ReLU(),
+            nn.ConvTranspose2d(4, 3, kernel_size=4, stride=2, padding=1),  # Output: 3x512x512
+            nn.Tanh(),
+        )
+
+    def forward(self, idle_image, rig_params):
+        features = self.conv_layers(idle_image)
+        attended_features = self.attention1(features, rig_params)
+        combined_input = torch.cat((attended_features.view(attended_features.size(0), -1), rig_params), dim=1)
+        intermediate = self.fc_layers(combined_input)
+        intermediate = intermediate.view(-1, 1024, 1, 1)
+        # normalized_features = self.adinorm1(intermediate, rig_params)
+        output = self.upsample_layers(intermediate)
+        return output
+
+
 class SimpleNet(nn.Module):
     def __init__(self, n_rig_params):
         super().__init__()
