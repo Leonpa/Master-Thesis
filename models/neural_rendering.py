@@ -94,8 +94,9 @@ class OutConv(nn.Module):
 
 
 class ChannelAttention(nn.Module):
-    def __init__(self, num_channels, num_params):
+    def __init__(self, num_channels, num_params, chann_att_scale=1.0):
         super(ChannelAttention, self).__init__()
+        self.chann_att_scale = chann_att_scale
         # A simple linear layer to transform the rig parameters into attention scores
         self.attention = nn.Sequential(
             nn.Linear(num_params, num_channels),
@@ -105,12 +106,13 @@ class ChannelAttention(nn.Module):
     def forward(self, x, rig_params):
         # Generate attention scores for each channel
         scores = self.attention(rig_params).unsqueeze(2).unsqueeze(3)  # Reshape to match spatial dimensions
-        return x * scores  # Apply attention scores to feature map
+        return x * scores * self.chann_att_scale # Apply attention scores to feature map
 
 
 class AdaptiveInstanceNorm(nn.Module):
-    def __init__(self, num_features, num_params):
+    def __init__(self, num_features, num_params, scale_factor=1.0):
         super(AdaptiveInstanceNorm, self).__init__()
+        self.scale_factor = scale_factor
         self.num_features = num_features
         self.linear = nn.Linear(num_params, num_features * 2)
         self.linear.weight.data[:, :num_features].normal_(1, 0.02)  # Initialise scale at N(1, 0.02)
@@ -120,26 +122,28 @@ class AdaptiveInstanceNorm(nn.Module):
         # Obtain scale and bias
         scale_bias = self.linear(rig_params)
         scale, bias = scale_bias.chunk(2, 1)
-        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x)
-        bias = bias.unsqueeze(2).unsqueeze(3).expand_as(x)
+        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x) * self.scale_factor
+        bias = bias.unsqueeze(2).unsqueeze(3).expand_as(x) * self.scale_factor
         return scale * x + bias
 
 
 class ComplexNet(nn.Module):
-    def __init__(self, num_params):
+    def __init__(self, num_params, adaIn_scale=1.0, chann_att_scale=1.0):
         super().__init__()
         # Define the number of rigging parameters:
 
         # Convolutional layers
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
-        self.adinorm1 = AdaptiveInstanceNorm(16, num_params)
-        self.attention1 = ChannelAttention(16, num_params)
+        self.adinorm1 = AdaptiveInstanceNorm(16, num_params, adaIn_scale)
+        self.attention1 = ChannelAttention(16, num_params, chann_att_scale)
 
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.adinorm2 = AdaptiveInstanceNorm(32, num_params)
-        self.attention2 = ChannelAttention(32, num_params)
+        self.adinorm2 = AdaptiveInstanceNorm(32, num_params, adaIn_scale)
+        self.attention2 = ChannelAttention(32, num_params, chann_att_scale)
 
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.adinorm3 = AdaptiveInstanceNorm(64, num_params, adaIn_scale)
+        self.attention3 = ChannelAttention(64, num_params, chann_att_scale)
 
         self.pool = nn.MaxPool2d(2)  # Output: 64x64x64
 
@@ -149,28 +153,36 @@ class ComplexNet(nn.Module):
         )
 
         self.upsample1 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)
+        self.adinorm_up1 = AdaptiveInstanceNorm(512, num_params, adaIn_scale)
+        self.attention_up1 = ChannelAttention(512, num_params, chann_att_scale)
 
         self.upsample2 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up2 = AdaptiveInstanceNorm(256, num_params)
-        self.attention_up2 = ChannelAttention(256, num_params)
+        self.adinorm_up2 = AdaptiveInstanceNorm(256, num_params, adaIn_scale)
+        self.attention_up2 = ChannelAttention(256, num_params, chann_att_scale)
 
         self.upsample3 = nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1)
+        self.adinorm_up3 = AdaptiveInstanceNorm(128, num_params, adaIn_scale)
+        self.attention_up3 = ChannelAttention(128, num_params, chann_att_scale)
 
         self.upsample4 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up4 = AdaptiveInstanceNorm(64, num_params)
-        self.attention_up4 = ChannelAttention(64, num_params)
+        self.adinorm_up4 = AdaptiveInstanceNorm(64, num_params, adaIn_scale)
+        self.attention_up4 = ChannelAttention(64, num_params, chann_att_scale)
 
         self.upsample5 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
+        self.adinorm_up5 = AdaptiveInstanceNorm(32, num_params, adaIn_scale)
+        self.attention_up5 = ChannelAttention(32, num_params, chann_att_scale)
 
         self.upsample6 = nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up6 = AdaptiveInstanceNorm(16, num_params)
-        self.attention_up6 = ChannelAttention(16, num_params)
+        self.adinorm_up6 = AdaptiveInstanceNorm(16, num_params, adaIn_scale)
+        self.attention_up6 = ChannelAttention(16, num_params, chann_att_scale)
 
         self.upsample7 = nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1)
+        self.adinorm_up7 = AdaptiveInstanceNorm(8, num_params, adaIn_scale)
+        self.attention_up7 = ChannelAttention(8, num_params, chann_att_scale)
 
         self.upsample8 = nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up8 = AdaptiveInstanceNorm(4, num_params)
-        self.attention_up8 = ChannelAttention(4, num_params)
+        self.adinorm_up8 = AdaptiveInstanceNorm(4, num_params, adaIn_scale)
+        self.attention_up8 = ChannelAttention(4, num_params, chann_att_scale)
 
         self.upsample9 = nn.ConvTranspose2d(4, 3, kernel_size=4, stride=2, padding=1)
 
@@ -189,6 +201,8 @@ class ComplexNet(nn.Module):
 
         # Convolutional block 3
         x = F.relu(self.conv3(x))
+        x = self.adinorm3(x, rig_params)  # Adaptive Instance Normalization
+        x = self.attention3(x, rig_params)  # Channel Attention
         x = self.pool(x)  # Final pooling gives 64x64x64 feature map
 
         # Flatten and combine with rig parameters
@@ -201,6 +215,8 @@ class ComplexNet(nn.Module):
 
         # Upsampling block 1
         x = F.relu(self.upsample1(intermediate))
+        x = self.adinorm_up1(x, rig_params)  # Adaptive Instance Normalization
+        x = self.attention_up1(x, rig_params)  # Channel Attention
 
         # Upsampling block 2
         x = F.relu(self.upsample2(x))
@@ -209,24 +225,31 @@ class ComplexNet(nn.Module):
 
         # Upsampling block 3
         x = F.relu(self.upsample3(x))
+        x = self.adinorm_up3(x, rig_params)
+        x = self.attention_up3(x, rig_params)
 
         x = F.relu(self.upsample4(x))
         x = self.adinorm_up4(x, rig_params)
         x = self.attention_up4(x, rig_params)
 
         x = F.relu(self.upsample5(x))
+        x = self.adinorm_up5(x, rig_params)
+        x = self.attention_up5(x, rig_params)
 
         x = F.relu(self.upsample6(x))
         x = self.adinorm_up6(x, rig_params)
         x = self.attention_up6(x, rig_params)
 
         x = F.relu(self.upsample7(x))
+        x = self.adinorm_up7(x, rig_params)
+        x = self.attention_up7(x, rig_params)
 
         x = F.relu(self.upsample8(x))
         x = self.adinorm_up8(x, rig_params)
         x = self.attention_up8(x, rig_params)
 
-        x = F.relu(self.upsample9(x))
+        x = self.upsample9(x)
+
         x = torch.tanh(x)  # Tanh for final image normalization
         return x
 
