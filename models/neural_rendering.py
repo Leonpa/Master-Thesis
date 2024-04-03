@@ -140,8 +140,6 @@ class ComplexNet(nn.Module):
         self.attention2 = ChannelAttention(32, num_params)
 
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.adinorm3 = AdaptiveInstanceNorm(64, num_params)
-        self.attention3 = ChannelAttention(64, num_params)
 
         self.pool = nn.MaxPool2d(2)  # Output: 64x64x64
 
@@ -151,32 +149,24 @@ class ComplexNet(nn.Module):
         )
 
         self.upsample1 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up1 = AdaptiveInstanceNorm(512, num_params)
-        self.attention_up1 = ChannelAttention(512, num_params)
 
         self.upsample2 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)
         self.adinorm_up2 = AdaptiveInstanceNorm(256, num_params)
         self.attention_up2 = ChannelAttention(256, num_params)
 
         self.upsample3 = nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up3 = AdaptiveInstanceNorm(128, num_params)
-        self.attention_up3 = ChannelAttention(128, num_params)
 
         self.upsample4 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)
         self.adinorm_up4 = AdaptiveInstanceNorm(64, num_params)
         self.attention_up4 = ChannelAttention(64, num_params)
 
         self.upsample5 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up5 = AdaptiveInstanceNorm(32, num_params)
-        self.attention_up5 = ChannelAttention(32, num_params)
 
         self.upsample6 = nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1)
         self.adinorm_up6 = AdaptiveInstanceNorm(16, num_params)
         self.attention_up6 = ChannelAttention(16, num_params)
 
         self.upsample7 = nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up7 = AdaptiveInstanceNorm(8, num_params)
-        self.attention_up7 = ChannelAttention(8, num_params)
 
         self.upsample8 = nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1)
         self.adinorm_up8 = AdaptiveInstanceNorm(4, num_params)
@@ -199,8 +189,6 @@ class ComplexNet(nn.Module):
 
         # Convolutional block 3
         x = F.relu(self.conv3(x))
-        x = self.adinorm3(x, rig_params)  # Adaptive Instance Normalization
-        x = self.attention3(x, rig_params)  # Channel Attention
         x = self.pool(x)  # Final pooling gives 64x64x64 feature map
 
         # Flatten and combine with rig parameters
@@ -213,8 +201,6 @@ class ComplexNet(nn.Module):
 
         # Upsampling block 1
         x = F.relu(self.upsample1(intermediate))
-        x = self.adinorm_up1(x, rig_params)  # Adaptive Instance Normalization
-        x = self.attention_up1(x, rig_params)  # Channel Attention
 
         # Upsampling block 2
         x = F.relu(self.upsample2(x))
@@ -223,24 +209,18 @@ class ComplexNet(nn.Module):
 
         # Upsampling block 3
         x = F.relu(self.upsample3(x))
-        x = self.adinorm_up3(x, rig_params)
-        x = self.attention_up3(x, rig_params)
 
         x = F.relu(self.upsample4(x))
         x = self.adinorm_up4(x, rig_params)
         x = self.attention_up4(x, rig_params)
 
         x = F.relu(self.upsample5(x))
-        x = self.adinorm_up5(x, rig_params)
-        x = self.attention_up5(x, rig_params)
 
         x = F.relu(self.upsample6(x))
         x = self.adinorm_up6(x, rig_params)
         x = self.attention_up6(x, rig_params)
 
         x = F.relu(self.upsample7(x))
-        x = self.adinorm_up7(x, rig_params)
-        x = self.attention_up7(x, rig_params)
 
         x = F.relu(self.upsample8(x))
         x = self.adinorm_up8(x, rig_params)
