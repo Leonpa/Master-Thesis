@@ -105,7 +105,7 @@ class SimpleNet(nn.Module):
         self.fc_comb = nn.Linear(64 * 128 * 128 + 128, 2048)
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(in_channels=128, out_channels=128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
@@ -135,7 +135,7 @@ class SimpleNet(nn.Module):
 
         x = torch.cat((x, rig), dim=1)
         x = F.relu(self.fc_comb(x))
-        x = x.view(-1, 256, 4, 4)  # Reshape to feed into decoder
+        x = x.view(-1, 128, 4, 4)  # Reshape to feed into decoder
         x = self.decoder(x)
         return x
 
