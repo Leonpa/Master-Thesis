@@ -138,6 +138,7 @@ class SimpleNet(nn.Module):
         x = F.relu(self.conv3(x))
         x = torch.flatten(x, 1)
 
+
         rig = F.relu(self.fc1(rig_params))
 
         x = torch.cat((x, rig), dim=1)
