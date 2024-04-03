@@ -105,18 +105,21 @@ class SimpleNet(nn.Module):
         self.fc_comb = nn.Linear(64 * 128 * 128 + 128, 2048)
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=2048, out_channels=512, kernel_size=2, stride=2),  # Reducing channels
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
             nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            # Additional layers with further reduced channels
             nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            # Final layer to get the correct number of output channels, adjust as per your requirement
-            nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=4, stride=2, padding=1),
-            nn.Sigmoid()  # Assuming normalized output
+            nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels=8, out_channels=4, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels=4, out_channels=3, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Sigmoid()
         )
 
     def forward(self, img, rig_params):
@@ -132,7 +135,7 @@ class SimpleNet(nn.Module):
 
         x = torch.cat((x, rig), dim=1)
         x = F.relu(self.fc_comb(x))
-        x = x.view(-1, 2048, 1, 1)  # Reshape to feed into decoder
+        x = x.view(-1, 256, 4, 4)  # Reshape to feed into decoder
         x = self.decoder(x)
         return x
 
