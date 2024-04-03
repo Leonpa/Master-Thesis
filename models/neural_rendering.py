@@ -105,28 +105,17 @@ class SimpleNet(nn.Module):
         self.fc_comb = nn.Linear(64 * 128 * 128 + 128, 2048)
 
         self.decoder = nn.Sequential(
-            # First layer to start the upsampling process
-            nn.ConvTranspose2d(in_channels=2048, out_channels=1024, kernel_size=2, stride=2),  # size: [4, 1024, 2, 2]
+            nn.ConvTranspose2d(in_channels=2048, out_channels=512, kernel_size=2, stride=2),  # Reducing channels
             nn.ReLU(),
-            # Continue upsampling to the target size
-            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),  # size: [4, 512, 4, 4]
+            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),  # size: [4, 256, 8, 8]
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),  # size: [4, 256, 8, 8]
+            # Additional layers with further reduced channels
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),  # size: [4, 256, 8, 8]
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=4, stride=2, padding=1),  # size: [4, 256, 8, 8]
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=4, stride=2, padding=1),  # size: [4, 256, 8, 8]
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=4, stride=2, padding=1),  # size: [4, 256, 8, 8]
-            nn.ReLU(),
-            # Additional layers to reach the desired output size
-            # Further layers should be added/adapted here to incrementally upscale to 512x512
-            # Final layer to get to the correct number of output channels and image size
-            nn.ConvTranspose2d(in_channels=8, out_channels=3, kernel_size=4, stride=2, padding=1),  # Adjust as needed
+            # Final layer to get the correct number of output channels, adjust as per your requirement
+            nn.ConvTranspose2d(in_channels=64, out_channels=3, kernel_size=4, stride=2, padding=1),
             nn.Sigmoid()  # Assuming normalized output
         )
 
