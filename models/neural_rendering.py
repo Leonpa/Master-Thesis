@@ -127,6 +127,41 @@ class AdaptiveInstanceNorm(nn.Module):
         return scale * x + bias
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        self.downsample = None
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+
 class ComplexNet(nn.Module):
     def __init__(self, num_params, adain_scale_factor=1.0, chann_att_scale=1.0):
         super().__init__()
@@ -181,8 +216,8 @@ class ComplexNet(nn.Module):
         combined_input = torch.cat((attended_features.view(attended_features.size(0), -1), rig_params), dim=1)
         intermediate = self.fc_layers(combined_input)
         intermediate = intermediate.view(-1, 1024, 1, 1)
-        normalized_features = self.adinorm1(intermediate, rig_params)
-        output = self.upsample_layers(normalized_features)
+        # normalized_features = self.adinorm1(intermediate, rig_params)
+        output = self.upsample_layers(intermediate)
         return output
 
 
@@ -333,7 +368,7 @@ class RenderDataset(torch.utils.data.Dataset):
 
 class ModelTrainer:
     def __init__(self, model, train_dataset, val_dataset=None, batch_size=32, learning_rate=1e-3, device="cuda" if torch.cuda.is_available() else
-    "cpu", log_dir='./logs', step_size=10, gamma=0.1, vgg_loss_weight=0.8, landmark_loss_weight=0.2):
+    "cpu", log_dir='./logs', lr_step_size=10, gamma=0.1, vgg_loss_weight=0.8, landmark_loss_weight=0.2):
 
         self.model = model.to(device)
         self.train_dataset = train_dataset
@@ -341,7 +376,7 @@ class ModelTrainer:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.device = device
-        self.step_size = step_size
+        self.step_size = lr_step_size
         self.gamma = gamma
 
         self.train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -349,6 +384,7 @@ class ModelTrainer:
         # self.optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
         self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         self.criterion = torch.nn.MSELoss()
+        self.lr_scheduler = True if lr_step_size > 0 else False
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.step_size, gamma=self.gamma)  # Initialize scheduler
 
         self.perceptual_loss = VGGLoss().to(device)
@@ -389,7 +425,8 @@ class ModelTrainer:
             epoch_loss = self.train_epoch(epoch)
             print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}')
             # Step the scheduler after each epoch
-            self.scheduler.step()
+            if self.lr_scheduler:
+                self.scheduler.step()
 
         # Close the SummaryWriter after training is finished
         self.writer.close()
@@ -486,7 +523,7 @@ class Evaluator:
         rig_params = self.load_parameters(index)
         idle_image = self.load_idle_image()
 
-        ground_truth_image_path = os.path.join(self.img_folder, f'{index}_rendis0001.png')
+        ground_truth_image_path = os.path.join(self.img_folder, f'{index+1}_rendis0001.png')
         ground_truth_image = Image.open(ground_truth_image_path).convert('RGB')
         ground_truth_image = self.transform(ground_truth_image).unsqueeze(0).to(self.device)
         ground_truth_image_np = ground_truth_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
