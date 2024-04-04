@@ -106,13 +106,13 @@ class ChannelAttention(nn.Module):
     def forward(self, x, rig_params):
         # Generate attention scores for each channel
         scores = self.attention(rig_params).unsqueeze(2).unsqueeze(3)  # Reshape to match spatial dimensions
-        return x * scores * self.chann_att_scale # Apply attention scores to feature map
+        return x * scores   # * self.chann_att_scale
 
 
 class AdaptiveInstanceNorm(nn.Module):
-    def __init__(self, num_features, num_params, scale_factor=1.0):
+    def __init__(self, num_features, num_params, adain_scale_factor=1.0):
         super(AdaptiveInstanceNorm, self).__init__()
-        self.scale_factor = scale_factor
+        self.scale_factor = adain_scale_factor
         self.num_features = num_features
         self.linear = nn.Linear(num_params, num_features * 2)
         self.linear.weight.data[:, :num_features].normal_(1, 0.02)  # Initialise scale at N(1, 0.02)
@@ -122,136 +122,69 @@ class AdaptiveInstanceNorm(nn.Module):
         # Obtain scale and bias
         scale_bias = self.linear(rig_params)
         scale, bias = scale_bias.chunk(2, 1)
-        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x) * self.scale_factor
-        bias = bias.unsqueeze(2).unsqueeze(3).expand_as(x) * self.scale_factor
+        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x)    ### * self.scale_factor
+        bias = bias.unsqueeze(2).unsqueeze(3).expand_as(x)  ###*  self.scale_factor
         return scale * x + bias
 
 
 class ComplexNet(nn.Module):
-    def __init__(self, num_params, adaIn_scale=1.0, chann_att_scale=1.0):
+    def __init__(self, num_params, adain_scale_factor=1.0, chann_att_scale=1.0):
         super().__init__()
         # Define the number of rigging parameters:
 
         # Convolutional layers
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
-        self.adinorm1 = AdaptiveInstanceNorm(16, num_params, adaIn_scale)
-        self.attention1 = ChannelAttention(16, num_params, chann_att_scale)
-
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.adinorm2 = AdaptiveInstanceNorm(32, num_params, adaIn_scale)
-        self.attention2 = ChannelAttention(32, num_params, chann_att_scale)
-
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.adinorm3 = AdaptiveInstanceNorm(64, num_params, adaIn_scale)
-        self.attention3 = ChannelAttention(64, num_params, chann_att_scale)
-
-        self.pool = nn.MaxPool2d(2)  # Output: 64x64x64
-
-        self.fc_layers = nn.Sequential(
-            nn.Linear(64 * 64 * 64 + num_params, 1024),
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),  # Input: 3x512x512
             nn.ReLU(),
+            nn.MaxPool2d(2),  # Output: 16x256x256
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # Output: 32x128x128
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),  # Output: 64x64x64
         )
 
-        self.upsample1 = nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up1 = AdaptiveInstanceNorm(512, num_params, adaIn_scale)
-        self.attention_up1 = ChannelAttention(512, num_params, chann_att_scale)
+        self.fc_layers = nn.Sequential(
+            nn.Linear(64 * 64 * 64 + num_params, 1024),  # Combine with params
+            nn.ReLU(),
+         )
 
-        self.upsample2 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up2 = AdaptiveInstanceNorm(256, num_params, adaIn_scale)
-        self.attention_up2 = ChannelAttention(256, num_params, chann_att_scale)
+        self.adinorm1 = AdaptiveInstanceNorm(1024, num_params, adain_scale_factor)
 
-        self.upsample3 = nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up3 = AdaptiveInstanceNorm(128, num_params, adaIn_scale)
-        self.attention_up3 = ChannelAttention(128, num_params, chann_att_scale)
+        self.attention1 = ChannelAttention(64, num_params, chann_att_scale)  # Assuming 64 channels in the feature map
 
-        self.upsample4 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up4 = AdaptiveInstanceNorm(64, num_params, adaIn_scale)
-        self.attention_up4 = ChannelAttention(64, num_params, chann_att_scale)
-
-        self.upsample5 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up5 = AdaptiveInstanceNorm(32, num_params, adaIn_scale)
-        self.attention_up5 = ChannelAttention(32, num_params, chann_att_scale)
-
-        self.upsample6 = nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up6 = AdaptiveInstanceNorm(16, num_params, adaIn_scale)
-        self.attention_up6 = ChannelAttention(16, num_params, chann_att_scale)
-
-        self.upsample7 = nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up7 = AdaptiveInstanceNorm(8, num_params, adaIn_scale)
-        self.attention_up7 = ChannelAttention(8, num_params, chann_att_scale)
-
-        self.upsample8 = nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1)
-        self.adinorm_up8 = AdaptiveInstanceNorm(4, num_params, adaIn_scale)
-        self.attention_up8 = ChannelAttention(4, num_params, chann_att_scale)
-
-        self.upsample9 = nn.ConvTranspose2d(4, 3, kernel_size=4, stride=2, padding=1)
+        self.upsample_layers = nn.Sequential(
+            nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1),  # Output: 512x2x2
+            nn.ReLU(),
+            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1),  # Output: 256x4x4
+            nn.ReLU(),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),  # Output: 128x8x8
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),  # Output: 64x16x16
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # Output: 32x32x32
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),  # Output: 16x64x64
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1),  # Output: 8x128x128
+            nn.ReLU(),
+            nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1),  # Output: 4x256x256
+            nn.ReLU(),
+            nn.ConvTranspose2d(4, 3, kernel_size=4, stride=2, padding=1),  # Output: 3x512x512
+            nn.Tanh(),
+        )
 
     def forward(self, idle_image, rig_params):
-        # Convolutional block 1
-        x = F.relu(self.conv1(idle_image))
-        x = self.adinorm1(x, rig_params)  # Adaptive Instance Normalization
-        x = self.attention1(x, rig_params)  # Channel Attention
-        x = self.pool(x)  # Pooling
-
-        # Convolutional block 2
-        x = F.relu(self.conv2(x))
-        x = self.adinorm2(x, rig_params)  # Adaptive Instance Normalization
-        x = self.attention2(x, rig_params)  # Channel Attention
-        x = self.pool(x)  # Pooling
-
-        # Convolutional block 3
-        x = F.relu(self.conv3(x))
-        x = self.adinorm3(x, rig_params)  # Adaptive Instance Normalization
-        x = self.attention3(x, rig_params)  # Channel Attention
-        x = self.pool(x)  # Final pooling gives 64x64x64 feature map
-
-        # Flatten and combine with rig parameters
-        x = torch.flatten(x, start_dim=1)
-        combined_input = torch.cat((x, rig_params), dim=1)
-
-        # Fully connected layers
+        features = self.conv_layers(idle_image)
+        attended_features = self.attention1(features, rig_params)
+        combined_input = torch.cat((attended_features.view(attended_features.size(0), -1), rig_params), dim=1)
         intermediate = self.fc_layers(combined_input)
-        intermediate = intermediate.view(-1, 1024, 1, 1)  # Reshape for upsampling
+        intermediate = intermediate.view(-1, 1024, 1, 1)
+        normalized_features = self.adinorm1(intermediate, rig_params)
+        output = self.upsample_layers(normalized_features)
+        return output
 
-        # Upsampling block 1
-        x = F.relu(self.upsample1(intermediate))
-        x = self.adinorm_up1(x, rig_params)  # Adaptive Instance Normalization
-        x = self.attention_up1(x, rig_params)  # Channel Attention
-
-        # Upsampling block 2
-        x = F.relu(self.upsample2(x))
-        x = self.adinorm_up2(x, rig_params)
-        x = self.attention_up2(x, rig_params)
-
-        # Upsampling block 3
-        x = F.relu(self.upsample3(x))
-        x = self.adinorm_up3(x, rig_params)
-        x = self.attention_up3(x, rig_params)
-
-        x = F.relu(self.upsample4(x))
-        x = self.adinorm_up4(x, rig_params)
-        x = self.attention_up4(x, rig_params)
-
-        x = F.relu(self.upsample5(x))
-        x = self.adinorm_up5(x, rig_params)
-        x = self.attention_up5(x, rig_params)
-
-        x = F.relu(self.upsample6(x))
-        x = self.adinorm_up6(x, rig_params)
-        x = self.attention_up6(x, rig_params)
-
-        x = F.relu(self.upsample7(x))
-        x = self.adinorm_up7(x, rig_params)
-        x = self.attention_up7(x, rig_params)
-
-        x = F.relu(self.upsample8(x))
-        x = self.adinorm_up8(x, rig_params)
-        x = self.attention_up8(x, rig_params)
-
-        x = self.upsample9(x)
-
-        x = torch.tanh(x)  # Tanh for final image normalization
-        return x
 
 class SimpleNet(nn.Module):
     def __init__(self, n_rig_params):
