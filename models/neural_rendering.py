@@ -167,23 +167,16 @@ class ComplexNet(nn.Module):
         super().__init__()
         # Define the number of rigging parameters:
 
-        # Convolutional layers
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),  # Input: 3x512x512
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # Output: 16x256x256
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # Output: 32x128x128
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # Output: 64x64x64
+            ResidualBlock(3, 16, stride=2),  # Input: 3x512x512, Output: 16x256x256
+            ResidualBlock(16, 32, stride=2), # Output: 32x128x128
+            ResidualBlock(32, 64, stride=2), # Output: 64x64x64
         )
 
         self.fc_layers = nn.Sequential(
-            nn.Linear(64 * 64 * 64 + num_params, 1024),  # Combine with params
+            nn.Linear(64 * 64 * 64 + num_params, 1024),
             nn.ReLU(),
-         )
+        )
 
         self.adinorm1 = AdaptiveInstanceNorm(1024, num_params, adain_scale_factor)
 
@@ -310,6 +303,7 @@ class SurrogateNet(nn.Module):
         x = self.up3(x, x2, plain_rig_params)
         x = self.up4(x, x1, plain_rig_params)
         logits = self.outc(x)
+
         return logits
 
 
