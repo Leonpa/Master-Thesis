@@ -2,6 +2,8 @@ import torch
 import os
 import json
 from PIL import Image
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
@@ -321,6 +323,73 @@ class SurrogateNet(nn.Module):
         return logits
 
 
+class VAEsimple(nn.Module):
+     def __init__(self, num_channels=3, num_params=28, latent_dim=256):
+         super().__init__()
+         # Image processing layers
+         self.conv_layers = nn.Sequential(
+             nn.Conv2d(num_channels, 32, kernel_size=4, stride=2, padding=1),
+             nn.ReLU(),
+             nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # Output: [batch, 64, 128, 128]
+             nn.ReLU(),
+             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # Output: [batch, 128, 64, 64]
+             nn.ReLU(),
+             nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # Output: [batch, 256, 32, 32]
+             nn.ReLU()
+         )
+
+         self.film_layer = FiLMLayer(256, num_params)  # Apply FiLM after some convolutional layers
+
+         # Fully connected layers for combining conv output with parameters
+         self.fc_layers = nn.Sequential(
+             nn.Flatten(),
+             nn.Linear(256 * 32 * 32 + num_params, 1024),  # Adjust this line to include num_params
+             nn.ReLU(),
+             nn.Linear(1024, 2 * latent_dim)  # Continue as before
+         )
+
+         self.decoder = nn.Sequential(
+             nn.Linear(latent_dim, 1024),
+             nn.ReLU(),
+             nn.Linear(1024, 256 * 32 * 32),
+             nn.ReLU(),
+             nn.Unflatten(1, (256, 32, 32)),
+             nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
+             nn.ReLU(),
+             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+             nn.ReLU(),
+             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
+             nn.ReLU(),
+             nn.ConvTranspose2d(32, num_channels, kernel_size=4, stride=2, padding=1),
+             nn.Sigmoid()
+         )
+
+         for m in self.modules():
+             if isinstance(m, nn.Conv2d):
+                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+             elif isinstance(m, nn.Linear):
+                 nn.init.xavier_normal_(m.weight)
+
+     def reparameterize(self, mu, log_var):
+         std = torch.exp(0.5 * log_var)
+         eps = torch.randn_like(std)
+         return mu + eps * std
+
+     def forward(self, x, params):
+         x = self.conv_layers(x)
+         x = x.view(x.size(0), -1)  # Ensure x is flattened correctly
+         x = torch.cat((x, params), dim=1)  # Concatenate x and params
+         x = self.fc_layers(x)
+         mu, log_var = torch.chunk(x, 2, dim=1)
+         z = self.reparameterize(mu, log_var)
+         return self.decoder(z), mu, log_var
+
+     def loss_function(self, recon_x, x, mu, log_var):
+         BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+         return BCE + KLD
+
+
 class VAE(nn.Module):
     def __init__(self, num_channels=3, num_params=28, latent_dim=256):
         super().__init__()
@@ -505,10 +574,6 @@ class ModelTrainer:
 
             self.optimizer.zero_grad()
             recon_images, mu, log_var = self.model(idle_images, params)
-
-            print("Max of recon_images:", recon_images.max().item())  # Check the maximum value
-            print("Min of recon_images:", recon_images.min().item())  # Check the minimum value
-
             loss = self.model.loss_function(recon_images, perturbed_images, mu, log_var)
             vgg_loss = self.perceptual_loss(recon_images, perturbed_images)
             loss = loss + self.vgg_loss_weight * vgg_loss
@@ -682,4 +747,43 @@ class Evaluator:
         plt.imshow(output_image)
         plt.title('Output Image')
         plt.axis('off')
+        plt.show()
+
+class LatentSpaceVisualizer:
+    def __init__(self, model):
+        self.model = model
+        self.device = "gpu" if torch.cuda.is_available() else "cpu"
+        self.model.eval()  # Ensure the model is in evaluation mode
+
+    def encode(self, data_loader):
+        """Encode data using the model's forward method."""
+        self.model.eval()
+        with torch.no_grad():
+            for idle_images, perturbed_images, params in data_loader:
+                idle_images, perturbed_images, params = idle_images.to(self.device), perturbed_images.to(self.device), params.to(self.device)
+
+                # Assuming you want to use both images, or just one; adjust as necessary:
+                outputs, mu, log_var = self.model(perturbed_images, params)  # Example using perturbed_images
+                return mu, log_var  # Return first batch only for simplicity
+
+    def reparameterize(self, mu, log_var):
+        """ Sample from the latent space using the reparameterization trick. """
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def reduce_dimensions(self, z):
+        """ Use t-SNE to reduce dimensions for visualization. """
+        z = z.cpu().numpy()
+        z_embedded = TSNE(n_components=2).fit_transform(z)
+        return z_embedded
+
+    def plot_latent_space(self, z_embedded, labels=None):
+        """Plot the reduced latent space."""
+        plt.figure(figsize=(10, 6))
+        scatter = plt.scatter(z_embedded[:, 0], z_embedded[:, 1], c=labels if labels is not None else 'blue')
+        plt.colorbar(scatter) if labels is not None else None
+        plt.xlabel('Dimension 1')
+        plt.ylabel('Dimension 2')
+        plt.title('Latent Space Visualization')
         plt.show()
