@@ -510,6 +510,8 @@ class ModelTrainer:
             print("Min of recon_images:", recon_images.min().item())  # Check the minimum value
 
             loss = self.model.loss_function(recon_images, perturbed_images, mu, log_var)
+            vgg_loss = self.perceptual_loss(recon_images, perturbed_images)
+            loss = loss + self.vgg_loss_weight * vgg_loss
             loss.backward()
             self.optimizer.step()
 
