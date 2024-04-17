@@ -328,24 +328,32 @@ class VAE(nn.Module):
         self.conv_layers = nn.Sequential(
             nn.Conv2d(num_channels, 32, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # Output: [batch, 64, 128, 128]
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # Output: [batch, 128, 64, 64]
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # Output: [batch, 256, 32, 32]
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),
             nn.ReLU()
         )
 
-        self.film_layer = FiLMLayer(256, num_params)  # Apply FiLM after some convolutional layers
-
-        # Fully connected layers for combining conv output with parameters
-        self.fc_layers = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256 * 32 * 32 + num_params, 1024),  # Adjust this line to include num_params
+        # Process rig parameters
+        self.params_processor = nn.Sequential(
+            nn.Linear(num_params, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 2 * latent_dim)  # Continue as before
+            nn.Linear(1024, 256 * 32 * 32),  # Maps parameters to the spatial dimension of the feature maps
+            nn.ReLU(),
+            nn.Unflatten(1, (256, 32, 32))  # Unflatten to match the spatial size at the end of conv_layers
         )
 
+        # Fully connected layers to produce latent variables
+        self.fc_layers = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256 * 32 * 32, 1024),  # Adjusted to match the flattened size after conv
+            nn.ReLU(),
+            nn.Linear(1024, 2 * latent_dim)  # Producing both mu and log_var
+        )
+
+        # Decoder part to reconstruct images
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, 1024),
             nn.ReLU(),
@@ -362,27 +370,19 @@ class VAE(nn.Module):
             nn.Sigmoid()
         )
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.Linear):
-                nn.init.xavier_normal_(m.weight)
-
     def reparameterize(self, mu, log_var):
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def forward(self, x, params):
-        x = self.conv_layers(x)
-        x = x.view(x.size(0), -1)  # Ensure x is flattened correctly
-        x = torch.cat((x, params), dim=1)  # Concatenate x and params
-        x = self.fc_layers(x)
-        mu, log_var = torch.chunk(x, 2, dim=1)
+        conv_features = self.conv_layers(x)
+        params_features = self.params_processor(params)
+        combined_features = conv_features + params_features  # Element-wise addition of features
+        combined_features = combined_features.view(combined_features.size(0), -1)
+        mu, log_var = torch.chunk(self.fc_layers(combined_features), 2, dim=1)
         z = self.reparameterize(mu, log_var)
         return self.decoder(z), mu, log_var
-
-
 
     def loss_function(self, recon_x, x, mu, log_var):
         BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
