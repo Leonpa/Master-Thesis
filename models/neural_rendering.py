@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision.models as models
 import torch.nn.functional as F
 
-
+"""
 class FiLMLayer(nn.Module):
     def __init__(self, num_features, num_params=28):
         super(FiLMLayer, self).__init__()
@@ -23,6 +23,20 @@ class FiLMLayer(nn.Module):
         scale = self.scale_transform(params_flat).unsqueeze(2).unsqueeze(3).expand_as(x)
         shift = self.shift_transform(params_flat).unsqueeze(2).unsqueeze(3).expand_as(x)
         return x * scale + shift
+"""
+
+
+class FiLMLayer(nn.Module):
+    def __init__(self, num_features, num_params):
+        super(FiLMLayer, self).__init__()
+        self.num_features = num_features
+        self.scale_transform = nn.Linear(num_params, num_features)
+        self.shift_transform = nn.Linear(num_params, num_features)
+
+    def forward(self, x, params):
+        gamma = self.scale_transform(params).view(-1, self.num_features, 1, 1)
+        beta = self.shift_transform(params).view(-1, self.num_features, 1, 1)
+        return gamma * x + beta
 
 
 class DoubleConv(nn.Module):
@@ -307,6 +321,75 @@ class SurrogateNet(nn.Module):
         return logits
 
 
+class VAE(nn.Module):
+    def __init__(self, num_channels=3, num_params=28, latent_dim=256):
+        super().__init__()
+        # Image processing layers
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(num_channels, 32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # Output: [batch, 64, 128, 128]
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # Output: [batch, 128, 64, 64]
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # Output: [batch, 256, 32, 32]
+            nn.ReLU()
+        )
+
+        self.film_layer = FiLMLayer(256, num_params)  # Apply FiLM after some convolutional layers
+
+        # Fully connected layers for combining conv output with parameters
+        self.fc_layers = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256 * 32 * 32 + num_params, 1024),  # Adjust this line to include num_params
+            nn.ReLU(),
+            nn.Linear(1024, 2 * latent_dim)  # Continue as before
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 256 * 32 * 32),
+            nn.ReLU(),
+            nn.Unflatten(1, (256, 32, 32)),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, num_channels, kernel_size=4, stride=2, padding=1),
+            nn.Sigmoid()
+        )
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x, params):
+        x = self.conv_layers(x)
+        x = x.view(x.size(0), -1)  # Ensure x is flattened correctly
+        x = torch.cat((x, params), dim=1)  # Concatenate x and params
+        x = self.fc_layers(x)
+        mu, log_var = torch.chunk(x, 2, dim=1)
+        z = self.reparameterize(mu, log_var)
+        return self.decoder(z), mu, log_var
+
+
+
+    def loss_function(self, recon_x, x, mu, log_var):
+        BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+        KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        return BCE + KLD
+
+
 class RenderDataset(torch.utils.data.Dataset):
     def __init__(self, rig_params_json_path, train_set_path, idle_img_path, transform=None):
         self.img_folder = train_set_path
@@ -391,6 +474,7 @@ class ModelTrainer:
         self.writer = SummaryWriter(log_dir)
 
     def train_epoch(self, epoch):
+        """
         self.model.train()
         running_loss = 0.0
         for batch_idx, (idle_images, perturbed_images, params) in enumerate(self.train_loader):
@@ -405,6 +489,27 @@ class ModelTrainer:
 
             print(f"Loss after VGG: {vgg_loss}, Loss after MSE: {mse_loss}, Loss after Landmark: {landmark_loss}")
             loss = mse_loss + self.vgg_loss_weight * vgg_loss + self.landmark_loss_weight * landmark_loss
+            loss.backward()
+            self.optimizer.step()
+
+            running_loss += loss.item() * idle_images.size(0)
+            self.writer.add_scalar('Loss/train', loss.item(), epoch * len(self.train_loader) + batch_idx)
+
+        epoch_loss = running_loss / len(self.train_loader.dataset)
+        return epoch_loss
+        """
+        self.model.train()
+        running_loss = 0.0
+        for batch_idx, (idle_images, perturbed_images, params) in enumerate(self.train_loader):
+            idle_images, perturbed_images, params = idle_images.to(self.device), perturbed_images.to(self.device), params.to(self.device)
+
+            self.optimizer.zero_grad()
+            recon_images, mu, log_var = self.model(idle_images, params)
+
+            print("Max of recon_images:", recon_images.max().item())  # Check the maximum value
+            print("Min of recon_images:", recon_images.min().item())  # Check the minimum value
+
+            loss = self.model.loss_function(recon_images, perturbed_images, mu, log_var)
             loss.backward()
             self.optimizer.step()
 
@@ -512,7 +617,7 @@ class Evaluator:
         # Load and preprocess the idle image
         idle_image = Image.open(self.idle_img_path).convert('RGB')
         return self.transform(idle_image).unsqueeze(0).to(self.device)  # Add batch dimension
-
+    """
     def evaluate(self, index=0):
         rig_params = self.load_parameters(index)
         idle_image = self.load_idle_image()
@@ -529,6 +634,29 @@ class Evaluator:
         # Processing output for visualization
         output_image = output.permute(1, 2, 0).numpy()  # Change from (C, H, W) to (H, W, C)
         print(max(output_image.flatten()))
+        output_image = np.clip(output_image, 0, 1)  # Ensure the image's values are between 0 and 1
+
+        # Return both the transformed idle image and the output for comparison
+        idle_img_np = idle_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
+
+        return idle_img_np, ground_truth_image_np, output_image
+    """
+    def evaluate(self, index=0):
+        rig_params = self.load_parameters(index)
+        idle_image = self.load_idle_image()
+
+        ground_truth_image_path = os.path.join(self.img_folder, f'{index + 1}_rendis0001.png')
+        ground_truth_image = Image.open(ground_truth_image_path).convert('RGB')
+        ground_truth_image = self.transform(ground_truth_image).unsqueeze(0).to(self.device)
+        ground_truth_image_np = ground_truth_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
+        ground_truth_image_np = np.clip(ground_truth_image_np, 0, 1)
+
+        with torch.no_grad():
+            reconstructed_image, _, _ = self.model(idle_image, rig_params)  # Unpack the tuple
+            output = reconstructed_image.cpu().squeeze(0)  # Now correctly calling cpu on the tensor
+
+        # Processing output for visualization
+        output_image = output.permute(1, 2, 0).numpy()  # Change from (C, H, W) to (H, W, C)
         output_image = np.clip(output_image, 0, 1)  # Ensure the image's values are between 0 and 1
 
         # Return both the transformed idle image and the output for comparison
