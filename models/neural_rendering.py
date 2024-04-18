@@ -543,6 +543,7 @@ class ModelTrainer:
         self.writer = SummaryWriter(log_dir)
 
     def train_epoch(self, epoch):
+
         """
         self.model.train()
         running_loss = 0.0
@@ -567,6 +568,7 @@ class ModelTrainer:
         epoch_loss = running_loss / len(self.train_loader.dataset)
         return epoch_loss
         """
+
         self.model.train()
         running_loss = 0.0
         for batch_idx, (idle_images, perturbed_images, params) in enumerate(self.train_loader):
@@ -575,8 +577,8 @@ class ModelTrainer:
             self.optimizer.zero_grad()
             recon_images, mu, log_var = self.model(idle_images, params)
             loss = self.model.loss_function(recon_images, perturbed_images, mu, log_var)
-            vgg_loss = self.perceptual_loss(recon_images, perturbed_images)
-            loss = loss + self.vgg_loss_weight * vgg_loss
+            # vgg_loss = self.perceptual_loss(recon_images, perturbed_images)
+            # loss = loss + self.vgg_loss_weight * vgg_loss
             loss.backward()
             self.optimizer.step()
 
