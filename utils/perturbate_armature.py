@@ -2,7 +2,6 @@ import bpy
 import json
 import random
 
-
 def apply_perturbations_within_limits(armature_name, base_data_path='data/armature_configuration/idle_armature.json',
                                       constraints_path='data/armature_configuration/armature_boundaries.json'):
     # Load base bone data from the JSON file
@@ -36,6 +35,7 @@ def apply_perturbations_within_limits(armature_name, base_data_path='data/armatu
                 for i in range(4):  # For quaternion rotation (x, y, z, w)
                     max_rot = constraints[bone_name]['max_rotation'][i]
                     bone.rotation_quaternion[i] += (random.random() - 0.5) * 2 * max_rot
+
             else:
                 print(f"No constraints found for bone {bone_name}. Using base position and rotation.")
         else:
@@ -46,5 +46,4 @@ def apply_perturbations_within_limits(armature_name, base_data_path='data/armatu
     bpy.ops.wm.save_mainfile()
 
 
-# Usage example:
 apply_perturbations_within_limits('rig')

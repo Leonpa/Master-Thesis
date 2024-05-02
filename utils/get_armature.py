@@ -10,8 +10,6 @@ def get_armature_data(armature_name, json_file_path='data/armature_configuration
     with open(json_file_path, 'r') as infile:
         relevant_bones = json.load(infile)
 
-    print("i am here")
-
     bones_data = {}
 
     for bone_name in relevant_bones["relevant_bones"]:

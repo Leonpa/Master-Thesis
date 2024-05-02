@@ -1,35 +1,22 @@
 {
     "jaw_master": {
         "max_translation": [
-            2,
-            2,
-            2
-        ],
-        "max_rotation": [
-            0,
-            1e-01,
-            1e-01,
-            1e-01
-        ]
-    },
-    "eyes": {
-        "max_translation": [
             1,
-            2,
+            1,
             1
         ],
         "max_rotation": [
             0,
-            1e-05,
-            1e-05,
-            1e-05
+            1e-02,
+            1e-02,
+            1e-02
         ]
     },
-    "eye.R": {
+    "cheek.B.R.001": {
         "max_translation": [
-            1,
-            2,
-            1
+            0.1,
+            0.2,
+            0.1
         ],
         "max_rotation": [
             0,
@@ -38,11 +25,141 @@
             1e-05
         ]
     },
-    "eye.L": {
+    "cheek.T.R.001": {
         "max_translation": [
-            1,
-            2,
-            1
+            0.1,
+            0.2,
+            0.1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "lips.R": {
+        "max_translation": [
+            0.5,
+            0.5,
+            0.5
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "lips.B.R.001": {
+        "max_translation": [
+            0.5,
+            0.5,
+            0.5
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "brow.T.R.003": {
+        "max_translation": [
+            0.1,
+            0.2,
+            0.1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "lid.B.R.002": {
+        "max_translation": [
+            0.1,
+            0.2,
+            0.1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "cheek.B.L.001": {
+        "max_translation": [
+            0.1,
+            0.2,
+            0.1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "cheek.T.L.001": {
+        "max_translation": [
+            0.1,
+            0.2,
+            0.1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "lips.L": {
+        "max_translation": [
+            0.5,
+            0.5,
+            0.5
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "lips.B.L.001": {
+        "max_translation": [
+            0.5,
+            0.5,
+            0.5
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "brow.T.L.003": {
+        "max_translation": [
+            0.1,
+            0.2,
+            0.1
+        ],
+        "max_rotation": [
+            0,
+            1e-05,
+            1e-05,
+            1e-05
+        ]
+    },
+    "lid.B.L.002": {
+        "max_translation": [
+            0.1,
+            0.2,
+            0.1
         ],
         "max_rotation": [
             0,

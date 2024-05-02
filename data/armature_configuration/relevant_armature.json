@@ -1,8 +1,17 @@
 {
     "relevant_bones": [
         "jaw_master",
-        "eyes",
-        "eye.R",
-        "eye.L"
+        "cheek.B.R.001",
+        "cheek.T.R.001",
+        "lips.R",
+        "lips.B.R.001",
+        "brow.T.R.003",
+        "lid.B.R.002",
+        "cheek.B.L.001",
+        "cheek.T.L.001",
+        "lips.L",
+        "lips.B.L.001",
+        "brow.T.L.003",
+        "lid.B.L.002"
     ]
 }

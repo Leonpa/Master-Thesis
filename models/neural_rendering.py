@@ -43,6 +43,7 @@ class FiLMLayer(nn.Module):
 
 class DoubleConv(nn.Module):
     """(Convolution => [BN] => ReLU) * 2"""
+
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
         if not mid_channels:
@@ -62,6 +63,7 @@ class DoubleConv(nn.Module):
 
 class Down(nn.Module):
     """Downscaling with maxpool then double conv"""
+
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
@@ -75,6 +77,7 @@ class Down(nn.Module):
 
 class Up(nn.Module):
     """Upscaling then double conv"""
+
     def __init__(self, in_channels, out_channels, num_params, bilinear=True):
         super().__init__()
 
@@ -122,7 +125,7 @@ class ChannelAttention(nn.Module):
     def forward(self, x, rig_params):
         # Generate attention scores for each channel
         scores = self.attention(rig_params).unsqueeze(2).unsqueeze(3)  # Reshape to match spatial dimensions
-        return x * scores   # * self.chann_att_scale
+        return x * scores  # * self.chann_att_scale
 
 
 class AdaptiveInstanceNorm(nn.Module):
@@ -138,7 +141,7 @@ class AdaptiveInstanceNorm(nn.Module):
         # Obtain scale and bias
         scale_bias = self.linear(rig_params)
         scale, bias = scale_bias.chunk(2, 1)
-        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x)    ### * self.scale_factor
+        scale = scale.unsqueeze(2).unsqueeze(3).expand_as(x)  ### * self.scale_factor
         bias = bias.unsqueeze(2).unsqueeze(3).expand_as(x)  ###*  self.scale_factor
         return scale * x + bias
 
@@ -185,8 +188,8 @@ class ComplexNet(nn.Module):
 
         self.conv_layers = nn.Sequential(
             ResidualBlock(3, 16, stride=2),  # Input: 3x512x512, Output: 16x256x256
-            ResidualBlock(16, 32, stride=2), # Output: 32x128x128
-            ResidualBlock(32, 64, stride=2), # Output: 64x64x64
+            ResidualBlock(16, 32, stride=2),  # Output: 32x128x128
+            ResidualBlock(32, 64, stride=2),  # Output: 64x64x64
         )
 
         self.fc_layers = nn.Sequential(
@@ -324,105 +327,30 @@ class SurrogateNet(nn.Module):
 
 
 class VAEsimple(nn.Module):
-     def __init__(self, num_channels=3, num_params=28, latent_dim=256):
-         super().__init__()
-         # Image processing layers
-         self.conv_layers = nn.Sequential(
-             nn.Conv2d(num_channels, 32, kernel_size=4, stride=2, padding=1),
-             nn.ReLU(),
-             nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # Output: [batch, 64, 128, 128]
-             nn.ReLU(),
-             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # Output: [batch, 128, 64, 64]
-             nn.ReLU(),
-             nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # Output: [batch, 256, 32, 32]
-             nn.ReLU()
-         )
-
-         self.film_layer = FiLMLayer(256, num_params)  # Apply FiLM after some convolutional layers
-
-         # Fully connected layers for combining conv output with parameters
-         self.fc_layers = nn.Sequential(
-             nn.Flatten(),
-             nn.Linear(256 * 32 * 32 + num_params, 1024),  # Adjust this line to include num_params
-             nn.ReLU(),
-             nn.Linear(1024, 2 * latent_dim)  # Continue as before
-         )
-
-         self.decoder = nn.Sequential(
-             nn.Linear(latent_dim, 1024),
-             nn.ReLU(),
-             nn.Linear(1024, 256 * 32 * 32),
-             nn.ReLU(),
-             nn.Unflatten(1, (256, 32, 32)),
-             nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
-             nn.ReLU(),
-             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
-             nn.ReLU(),
-             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
-             nn.ReLU(),
-             nn.ConvTranspose2d(32, num_channels, kernel_size=4, stride=2, padding=1),
-             nn.Sigmoid()
-         )
-
-         for m in self.modules():
-             if isinstance(m, nn.Conv2d):
-                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-             elif isinstance(m, nn.Linear):
-                 nn.init.xavier_normal_(m.weight)
-
-     def reparameterize(self, mu, log_var):
-         std = torch.exp(0.5 * log_var)
-         eps = torch.randn_like(std)
-         return mu + eps * std
-
-     def forward(self, x, params):
-         x = self.conv_layers(x)
-         x = x.view(x.size(0), -1)  # Ensure x is flattened correctly
-         x = torch.cat((x, params), dim=1)  # Concatenate x and params
-         x = self.fc_layers(x)
-         mu, log_var = torch.chunk(x, 2, dim=1)
-         z = self.reparameterize(mu, log_var)
-         return self.decoder(z), mu, log_var
-
-     def loss_function(self, recon_x, x, mu, log_var):
-         BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
-         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-         return BCE + KLD
-
-
-class VAE(nn.Module):
     def __init__(self, num_channels=3, num_params=28, latent_dim=256):
         super().__init__()
         # Image processing layers
         self.conv_layers = nn.Sequential(
             nn.Conv2d(num_channels, 32, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # Output: [batch, 64, 128, 128]
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # Output: [batch, 128, 64, 64]
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # Output: [batch, 256, 32, 32]
             nn.ReLU()
         )
 
-        # Process rig parameters
-        self.params_processor = nn.Sequential(
-            nn.Linear(num_params, 1024),
-            nn.ReLU(),
-            nn.Linear(1024, 256 * 32 * 32),  # Maps parameters to the spatial dimension of the feature maps
-            nn.ReLU(),
-            nn.Unflatten(1, (256, 32, 32))  # Unflatten to match the spatial size at the end of conv_layers
-        )
+        self.film_layer = FiLMLayer(256, num_params)  # Apply FiLM after some convolutional layers
 
-        # Fully connected layers to produce latent variables
+        # Fully connected layers for combining conv output with parameters
         self.fc_layers = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(256 * 32 * 32, 1024),  # Adjusted to match the flattened size after conv
+            nn.Linear(256 * 32 * 32 + num_params, 1024),  # Adjust this line to include num_params
             nn.ReLU(),
-            nn.Linear(1024, 2 * latent_dim)  # Producing both mu and log_var
+            nn.Linear(1024, 2 * latent_dim)  # Continue as before
         )
 
-        # Decoder part to reconstruct images
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, 1024),
             nn.ReLU(),
@@ -439,17 +367,24 @@ class VAE(nn.Module):
             nn.Sigmoid()
         )
 
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+
     def reparameterize(self, mu, log_var):
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def forward(self, x, params):
-        conv_features = self.conv_layers(x)
-        params_features = self.params_processor(params)
-        combined_features = conv_features + params_features  # Element-wise addition of features
-        combined_features = combined_features.view(combined_features.size(0), -1)
-        mu, log_var = torch.chunk(self.fc_layers(combined_features), 2, dim=1)
+        x = self.conv_layers(x)
+        # x = self.film_layer(x, params)  # Apply FiLM with parameters to modulate the features
+        x = x.view(x.size(0), -1)  # Ensure x is flattened correctly
+        x = torch.cat((x, params), dim=1)  # Concatenate x and params
+        x = self.fc_layers(x)
+        mu, log_var = torch.chunk(x, 2, dim=1)
         z = self.reparameterize(mu, log_var)
         return self.decoder(z), mu, log_var
 
@@ -686,6 +621,7 @@ class Evaluator:
         # Load and preprocess the idle image
         idle_image = Image.open(self.idle_img_path).convert('RGB')
         return self.transform(idle_image).unsqueeze(0).to(self.device)  # Add batch dimension
+
     """
     def evaluate(self, index=0):
         rig_params = self.load_parameters(index)
@@ -710,6 +646,7 @@ class Evaluator:
 
         return idle_img_np, ground_truth_image_np, output_image
     """
+
     def evaluate(self, index=0):
         rig_params = self.load_parameters(index)
         idle_image = self.load_idle_image()
@@ -750,6 +687,7 @@ class Evaluator:
         plt.title('Output Image')
         plt.axis('off')
         plt.show()
+
 
 class LatentSpaceVisualizer:
     def __init__(self, model):
