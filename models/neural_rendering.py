@@ -120,7 +120,7 @@ class ResidualBlock(nn.Module):
 
 
 class SurrogateVAE(nn.Module):
-    def __init__(self, num_channels=3, num_params=28, latent_dim=256):
+    def __init__(self, num_channels=3, num_params=77, latent_dim=256):
         super().__init__()
         # Image processing layers
         self.conv_layers = nn.Sequential(
@@ -181,8 +181,7 @@ class SurrogateVAE(nn.Module):
         z = self.reparameterize(mu, log_var)
         return self.decoder(z), mu, log_var
 
-    @staticmethod
-    def loss_function(recon_x, x, mu, log_var):
+    def loss_function(self, recon_x, x, mu, log_var):
         BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
         return BCE + KLD
