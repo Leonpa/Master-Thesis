@@ -261,42 +261,15 @@ class ModelTrainer:
         self.lr_scheduler = True if lr_step_size > 0 else False
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.step_size, gamma=self.gamma)  # Initialize scheduler
 
-        self.perceptual_loss = VGGLoss().to(device)
+        # self.perceptual_loss = VGGLoss().to(device)
         self.mse_loss = torch.nn.MSELoss()
-        self.simulated_landmark_loss = SimulatedLandmarkLoss().to(device)
+        # self.simulated_landmark_loss = SimulatedLandmarkLoss().to(device)
         self.vgg_loss_weight = vgg_loss_weight  # Weight for combining MSE and perceptual loss
         self.landmark_loss_weight = landmark_loss_weight  # Weight for combining perceptual and landmark loss
 
-        # TensorBoard SummaryWriter initialization
-        self.writer = SummaryWriter(log_dir)
+        self.loss_history = []
 
     def train_epoch(self, epoch):
-
-        """
-        self.model.train()
-        running_loss = 0.0
-        for batch_idx, (idle_images, perturbed_images, params) in enumerate(self.train_loader):
-            idle_images, perturbed_images, params = idle_images.to(self.device), perturbed_images.to(self.device), params.to(self.device)
-
-            self.model.to(self.device)
-            self.optimizer.zero_grad()
-            outputs = self.model(idle_images, params)
-            mse_loss = self.mse_loss(outputs, perturbed_images)
-            vgg_loss = self.perceptual_loss(outputs, perturbed_images)
-            landmark_loss = self.simulated_landmark_loss(outputs, perturbed_images)
-
-            print(f"Loss after VGG: {vgg_loss}, Loss after MSE: {mse_loss}, Loss after Landmark: {landmark_loss}")
-            loss = mse_loss + self.vgg_loss_weight * vgg_loss + self.landmark_loss_weight * landmark_loss
-            loss.backward()
-            self.optimizer.step()
-
-            running_loss += loss.item() * idle_images.size(0)
-            self.writer.add_scalar('Loss/train', loss.item(), epoch * len(self.train_loader) + batch_idx)
-
-        epoch_loss = running_loss / len(self.train_loader.dataset)
-        return epoch_loss
-        """
-
         self.model.train()
         running_loss = 0.0
         for batch_idx, (idle_images, perturbed_images, params) in enumerate(self.train_loader):
@@ -309,11 +282,10 @@ class ModelTrainer:
             # loss = loss + self.vgg_loss_weight * vgg_loss
             loss.backward()
             self.optimizer.step()
-
             running_loss += loss.item() * idle_images.size(0)
-            self.writer.add_scalar('Loss/train', loss.item(), epoch * len(self.train_loader) + batch_idx)
-
         epoch_loss = running_loss / len(self.train_loader.dataset)
+        self.loss_history.append(epoch_loss)
+
         return epoch_loss
 
     def train(self, num_epochs):
@@ -323,9 +295,17 @@ class ModelTrainer:
             # Step the scheduler after each epoch
             if self.lr_scheduler:
                 self.scheduler.step()
+        self.plot_losses()
 
-        # Close the SummaryWriter after training is finished
-        self.writer.close()
+    def plot_losses(self):
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.loss_history, label='Training Loss')
+        plt.title('Train Loss Over Epochs')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
 
 class FeatureExtractor(nn.Module):
