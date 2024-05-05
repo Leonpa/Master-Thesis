@@ -41,68 +41,6 @@ class FiLMLayer(nn.Module):
         return gamma * x + beta
 
 
-class DoubleConv(nn.Module):
-    """(Convolution => [BN] => ReLU) * 2"""
-
-    def __init__(self, in_channels, out_channels, mid_channels=None):
-        super().__init__()
-        if not mid_channels:
-            mid_channels = out_channels
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        return self.double_conv(x)
-
-
-class Down(nn.Module):
-    """Downscaling with maxpool then double conv"""
-
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
-            DoubleConv(in_channels, out_channels)
-        )
-
-    def forward(self, x):
-        return self.maxpool_conv(x)
-
-
-class Up(nn.Module):
-    """Upscaling then double conv"""
-
-    def __init__(self, in_channels, out_channels, num_params, bilinear=True):
-        super().__init__()
-
-        self.film = FiLMLayer(out_channels, num_params)
-
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        else:
-            self.up = nn.ConvTranspose2d(in_channels // 2, in_channels // 2, kernel_size=2, stride=2)
-
-        self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-
-    def forward(self, x1, x2, params):
-        x1 = self.up(x1)
-        diffY = x2.size()[2] - x1.size()[2]
-        diffX = x2.size()[3] - x1.size()[3]
-
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
-        x = torch.cat([x2, x1], dim=1)
-        x = self.conv(x)
-        x = self.film(x, params)  # Apply FiLM with rig parameters
-        return x
-
-
 class OutConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(OutConv, self).__init__()
@@ -181,152 +119,7 @@ class ResidualBlock(nn.Module):
         return out
 
 
-class ComplexNet(nn.Module):
-    def __init__(self, num_params, adain_scale_factor=1.0, chann_att_scale=1.0):
-        super().__init__()
-        # Define the number of rigging parameters:
-
-        self.conv_layers = nn.Sequential(
-            ResidualBlock(3, 16, stride=2),  # Input: 3x512x512, Output: 16x256x256
-            ResidualBlock(16, 32, stride=2),  # Output: 32x128x128
-            ResidualBlock(32, 64, stride=2),  # Output: 64x64x64
-        )
-
-        self.fc_layers = nn.Sequential(
-            nn.Linear(64 * 64 * 64 + num_params, 1024),
-            nn.ReLU(),
-        )
-
-        self.adinorm1 = AdaptiveInstanceNorm(1024, num_params, adain_scale_factor)
-
-        self.attention1 = ChannelAttention(64, num_params, chann_att_scale)  # Assuming 64 channels in the feature map
-
-        self.upsample_layers = nn.Sequential(
-            nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1),  # Output: 512x2x2
-            nn.ReLU(),
-            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1),  # Output: 256x4x4
-            nn.ReLU(),
-            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),  # Output: 128x8x8
-            nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),  # Output: 64x16x16
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),  # Output: 32x32x32
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1),  # Output: 16x64x64
-            nn.ReLU(),
-            nn.ConvTranspose2d(16, 8, kernel_size=4, stride=2, padding=1),  # Output: 8x128x128
-            nn.ReLU(),
-            nn.ConvTranspose2d(8, 4, kernel_size=4, stride=2, padding=1),  # Output: 4x256x256
-            nn.ReLU(),
-            nn.ConvTranspose2d(4, 3, kernel_size=4, stride=2, padding=1),  # Output: 3x512x512
-            nn.Tanh(),
-        )
-
-    def forward(self, idle_image, rig_params):
-        features = self.conv_layers(idle_image)
-        attended_features = self.attention1(features, rig_params)
-        combined_input = torch.cat((attended_features.view(attended_features.size(0), -1), rig_params), dim=1)
-        intermediate = self.fc_layers(combined_input)
-        intermediate = intermediate.view(-1, 1024, 1, 1)
-        # normalized_features = self.adinorm1(intermediate, rig_params)
-        output = self.upsample_layers(intermediate)
-        return output
-
-
-class SimpleNet(nn.Module):
-    def __init__(self, n_rig_params):
-        super().__init__()
-        # Convolutional layers for the image
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-
-        self.fc1 = nn.Linear(n_rig_params, 128)
-        self.fc_comb = nn.Linear(64 * 64 * 128 + 128, 2048)
-
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=128, out_channels=128, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=16, out_channels=8, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=8, out_channels=4, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=4, out_channels=3, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Sigmoid()
-        )
-
-    def forward(self, img, rig_params):
-        x = F.relu(self.conv1(img))
-        x = self.pool(x)
-        x = F.relu(self.conv2(x))
-        x = self.pool(x)
-        x = F.relu(self.conv3(x))
-        x = self.pool(x)
-        x = F.relu(self.conv4(x))
-        x = torch.flatten(x, 1)
-
-        rig = F.relu(self.fc1(rig_params))
-        # print(x.shape, rig.shape)
-        x = torch.cat((x, rig), dim=1)
-        # print(x.shape)
-        x = F.relu(self.fc_comb(x))
-        x = x.view(-1, 128, 4, 4)  # Reshape to feed into decoder
-        x = self.decoder(x)
-        return x
-
-
-class SurrogateNet(nn.Module):
-    def __init__(self, n_channels, n_classes, n_rig_params, bilinear=True):
-        super().__init__()
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.bilinear = bilinear
-
-        self.inc = DoubleConv(n_channels, 64)
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
-        self.down3 = Down(256, 512)
-        factor = 2 if bilinear else 1
-        self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, n_rig_params, bilinear)
-        self.up2 = Up(512, 256 // factor, n_rig_params, bilinear)
-        self.up3 = Up(256, 128 // factor, n_rig_params, bilinear)
-        self.up4 = Up(128, 64, n_rig_params, bilinear)
-        self.outc = OutConv(64, n_classes)
-
-        # Process rig parameters
-        self.fc_rig_params = nn.Linear(n_rig_params, 64 * 64 * factor)
-
-    def forward(self, idle_image, rig_params):
-        plain_rig_params = rig_params
-        # rig_params = self.fc_rig_params(rig_params)
-        # rig_params = rig_params.view(-1, 64, 64, 1)
-        # rig_params = rig_params.repeat(1, 1, 1, idle_image.shape[3] // 64) # Adjust to match spatial dimensions
-
-        x1 = self.inc(idle_image)
-        x2 = self.down1(x1)
-        x3 = self.down2(x2)
-        x4 = self.down3(x3)
-        x5 = self.down4(x4)
-        x = self.up1(x5, x4, plain_rig_params)
-        x = self.up2(x, x3, plain_rig_params)
-        x = self.up3(x, x2, plain_rig_params)
-        x = self.up4(x, x1, plain_rig_params)
-        logits = self.outc(x)
-
-        return logits
-
-
-class VAEsimple(nn.Module):
+class SurrogateVAE(nn.Module):
     def __init__(self, num_channels=3, num_params=28, latent_dim=256):
         super().__init__()
         # Image processing layers
@@ -388,7 +181,8 @@ class VAEsimple(nn.Module):
         z = self.reparameterize(mu, log_var)
         return self.decoder(z), mu, log_var
 
-    def loss_function(self, recon_x, x, mu, log_var):
+    @staticmethod
+    def loss_function(recon_x, x, mu, log_var):
         BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
         return BCE + KLD
