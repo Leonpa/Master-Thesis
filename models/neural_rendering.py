@@ -395,31 +395,6 @@ class Evaluator:
         idle_image = Image.open(self.idle_img_path).convert('RGB')
         return self.transform(idle_image).unsqueeze(0).to(self.device)  # Add batch dimension
 
-    """
-    def evaluate(self, index=0):
-        rig_params = self.load_parameters(index)
-        idle_image = self.load_idle_image()
-
-        ground_truth_image_path = os.path.join(self.img_folder, f'{index+1}_rendis0001.png')
-        ground_truth_image = Image.open(ground_truth_image_path).convert('RGB')
-        ground_truth_image = self.transform(ground_truth_image).unsqueeze(0).to(self.device)
-        ground_truth_image_np = ground_truth_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
-        ground_truth_image_np = np.clip(ground_truth_image_np, 0, 1)
-
-        with torch.no_grad():
-            output = self.model(idle_image, rig_params).cpu().squeeze(0)  # Remove batch dimension
-
-        # Processing output for visualization
-        output_image = output.permute(1, 2, 0).numpy()  # Change from (C, H, W) to (H, W, C)
-        print(max(output_image.flatten()))
-        output_image = np.clip(output_image, 0, 1)  # Ensure the image's values are between 0 and 1
-
-        # Return both the transformed idle image and the output for comparison
-        idle_img_np = idle_image.cpu().squeeze(0).permute(1, 2, 0).numpy()
-
-        return idle_img_np, ground_truth_image_np, output_image
-    """
-
     def evaluate(self, index=0):
         rig_params = self.load_parameters(index)
         idle_image = self.load_idle_image()
@@ -443,7 +418,8 @@ class Evaluator:
 
         return idle_img_np, ground_truth_image_np, output_image
 
-    def display_results(self, idle_image, ground_truth_image, output_image):
+    @staticmethod
+    def display_results(idle_image, ground_truth_image, output_image):
         plt.figure(figsize=(12, 6))
         plt.subplot(1, 3, 1)
         plt.imshow(idle_image)
@@ -458,6 +434,41 @@ class Evaluator:
         plt.subplot(1, 3, 3)
         plt.imshow(output_image)
         plt.title('Output Image')
+        plt.axis('off')
+        plt.show()
+
+
+class Inference:
+    def __init__(self, model,  idle_img_path, device="cuda" if torch.cuda.is_available() else "cpu"):
+        self.device = device
+        self.model = model.to(device)
+        self.idle_img_path = idle_img_path
+        self.transform = transforms.Compose([
+            transforms.Resize((512, 512)),
+            transforms.ToTensor(),
+        ])
+        self.model.eval()
+
+    def load_idle_image(self):
+        # Load and preprocess the idle image
+        idle_image = Image.open(self.idle_img_path).convert('RGB')
+        return self.transform(idle_image).unsqueeze(0).to(self.device)  # Add batch dimension
+
+    def inference(self, rig_param_values):
+        idle_image = self.load_idle_image()
+        rig_params = torch.tensor([rig_param_values], dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            reconstructed_image, _, _ = self.model(idle_image, rig_params)
+            output = reconstructed_image.cpu().squeeze(0)
+
+        output_image = output.permute(1, 2, 0).numpy()  # Change from (C, H, W) to (H, W, C)
+        # output_image = np.clip(output_image, 0, 1)
+        return output_image
+
+    @staticmethod
+    def inference_display_results(output_image):
+        plt.imshow(output_image)
+        plt.title('Output Image after inference')
         plt.axis('off')
         plt.show()
 
