@@ -456,9 +456,9 @@ class Inference:
         idle_image = Image.open(self.idle_img_path).convert('RGB')
         return self.transform(idle_image).unsqueeze(0).to(self.device)  # Add batch dimension
 
-    def inference(self, rig_param_values):
+    def inference(self, rig_params):
         idle_image = self.load_idle_image()
-        rig_params = torch.tensor([rig_param_values], dtype=torch.float32).to(self.device)
+        # rig_params = torch.tensor([rig_param_values], dtype=torch.float32).to(self.device)
         with torch.no_grad():
             reconstructed_image, _, _ = self.model(idle_image, rig_params)
             output = reconstructed_image.cpu().squeeze(0)

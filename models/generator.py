@@ -8,9 +8,9 @@ from models.neural_rendering import SurrogateVAE, Inference
 
 
 class Generator(nn.Module):
-    def __init__(self, num_emotions=7, hidden_dim=128, output_dim=33, num_params=77, base_path='', device="cuda" if torch.cuda.is_available() else
+    def __init__(self, num_emotions=7, hidden_dim=128, output_dim=77, num_params=77, base_path='', device="cuda" if torch.cuda.is_available() else
     "cpu"):
-        super(Generator, self).__init__()
+        super().__init__()
         self.fc1 = nn.Linear(num_emotions, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim * 2)
         self.fc3 = nn.Linear(hidden_dim * 2, hidden_dim)
@@ -42,21 +42,34 @@ class Generator(nn.Module):
         return x
 
     def process_and_compute_loss(self, rig_param_values, target_emotions):
-        # Compute the VAE Forward Pass
-        vae_output = self.vae_evaluator.inference(rig_param_values)
+        losses = []
+        pred_probabilities_list = []
 
-        # Compute the DeepFace Forward Pass
-        pred_dict = DeepFace.analyze(vae_output, actions=['emotion'], enforce_detection=False)[0]['emotion']
-        pred_emotions = torch.tensor([pred_dict[key] for key in self.emotion_keys], dtype=torch.float32)
+        # Loop through each item in the batch
+        for i in range(rig_param_values.size(0)):
+            single_rig_param = rig_param_values[i].unsqueeze(0)  # Add batch dimension
+            single_target_emotion = target_emotions[i].unsqueeze(0)  # Add batch dimension
 
-        # evtl. unnötig:
-        pred_probabilities = F.softmax(pred_emotions, dim=0)
+            # Compute the VAE Forward Pass for single item
+            vae_output = self.vae_evaluator.inference(single_rig_param)
 
-        target_emotions = torch.tensor(target_emotions, dtype=torch.float32)
+            # Compute the DeepFace Forward Pass
+            pred_dict = DeepFace.analyze(vae_output, actions=['emotion'], enforce_detection=False)[0]['emotion']
+            pred_emotions = torch.tensor([pred_dict[key] for key in self.emotion_keys], dtype=torch.float32)
+            pred_emotions = pred_emotions.unsqueeze(0)  # Ensure it's batched
 
-        criterion = torch.nn.BCEWithLogitsLoss()
-        loss = criterion(pred_emotions, target_emotions)
-        return loss, pred_probabilities
+            # Compute loss for single item
+            criterion = torch.nn.BCEWithLogitsLoss()
+            loss = criterion(pred_emotions, single_target_emotion)
+
+            losses.append(loss)
+            pred_probabilities_list.append(pred_emotions)
+
+        # Aggregate the losses
+        total_loss = torch.stack(losses).mean()  # Average loss across the batch
+        pred_probabilities_batch = torch.cat(pred_probabilities_list, dim=0)  # Concatenate all predictions
+
+        return total_loss, pred_probabilities_batch
 
 
 class GANTrainer:
@@ -69,6 +82,7 @@ class GANTrainer:
 
     def train(self, dataloader, epochs=10):
         for epoch in range(epochs):
+            self.generator.model.train()  # Ensure the model is in training mode
             for emotion_labels, real_params in dataloader:
                 # Convert emotion labels to one-hot encoding if necessary
                 # and move tensors to the correct device
@@ -86,5 +100,6 @@ class GANTrainer:
                 loss.backward()
                 self.optim_g.step()
 
-                # Logging, validation, or any additional steps would go here
+                # Switch back to evaluation mode after the training step
+            self.generator.model.eval()
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item()}")
