@@ -166,7 +166,8 @@ class SurrogateVAE(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.xavier_normal_(m.weight)
 
-    def reparameterize(self, mu, log_var):
+    @staticmethod
+    def reparameterize(mu, log_var):
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
         return mu + eps * std
@@ -181,7 +182,8 @@ class SurrogateVAE(nn.Module):
         z = self.reparameterize(mu, log_var)
         return self.decoder(z), mu, log_var
 
-    def loss_function(self, recon_x, x, mu, log_var):
+    @staticmethod
+    def loss_function(recon_x, x, mu, log_var):
         BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
         return BCE + KLD
