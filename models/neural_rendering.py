@@ -302,12 +302,27 @@ class ModelTrainer:
     def plot_losses(self):
         plt.figure(figsize=(10, 5))
         plt.plot(self.loss_history, label='Training Loss')
-        plt.title('Train Loss Over Epochs')
-        plt.xlabel('Epochs')
+        plt.title('Training Loss - Variational Autoencoder')
+        plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
-        plt.grid(True)
-        plt.show()
+        # plt.grid(True)
+        # plt.show()
+        # plt.ylim(1.7, 4)
+        plt.savefig(f'plot1.png')  # Save plot as PNG file
+        plt.close()  # Close the plot to free up memory
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.loss_history, label='Training Loss')
+        plt.title('Training Loss - Variational Autoencoder')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        # plt.grid(True)
+        # plt.show()
+        plt.ylim(7.205, 7.26)
+        plt.savefig(f'plot2.png')  # Save plot as PNG file
+        plt.close()  # Close the plot to free up memory
 
 
 class FeatureExtractor(nn.Module):
