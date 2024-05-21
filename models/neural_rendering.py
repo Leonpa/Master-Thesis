@@ -320,7 +320,7 @@ class ModelTrainer:
         plt.legend()
         # plt.grid(True)
         # plt.show()
-        plt.ylim(7.205, 7.26)
+        plt.ylim(7.21e6, 7.24e6)
         plt.savefig(f'plot2.png')  # Save plot as PNG file
         plt.close()  # Close the plot to free up memory
 
